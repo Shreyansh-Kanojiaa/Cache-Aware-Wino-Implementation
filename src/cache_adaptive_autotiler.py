@@ -67,9 +67,13 @@ class CacheAdaptiveAutotiler:
                     best_score = score
                     best_cand = cand
                     
-        # Fallback behaviour: default to F(2,3)
+        # Nothing fits the L1 budget, which is true of most real layers. F(4,3) was
+        # within 2% of the best per-layer choice across the E2E models on RPi4 at T=4,
+        # and F(2,3) was 30-40% slower (raw_logs/harness/layer_m_grid.csv).
+        # ponytail: fixed choice measured on one board, and it ignores image size;
+        # add a size term or per-board tuning if another target disagrees.
         if best_cand is None:
-            best_cand = self.candidates[0]
+            best_cand = self.candidates[1]
             best_score = self.compute_reuse_score(best_cand["tile"], c_in, c_out)
             
         return {
@@ -98,6 +102,11 @@ class CacheAdaptiveAutotiler:
             json.dump(decisions, f, indent=2)
 
 if __name__ == "__main__":
+    _t = CacheAdaptiveAutotiler(platform_descriptor={"l1d_size_bytes": 32768})
+    assert _t.select_best_tile(64, 64)["selected_tile"]["m"] == 4  # fallback
+    assert _t.select_best_tile(3, 64)["selected_tile"]["m"] == 6   # fits L1
+    assert _t.select_best_tile(16, 32)["selected_tile"]["m"] == 2  # fits L1 only at m=2
+
     tiler = CacheAdaptiveAutotiler()
     dec = tiler.select_best_tile(64, 64)
     print("Decision:", dec)
