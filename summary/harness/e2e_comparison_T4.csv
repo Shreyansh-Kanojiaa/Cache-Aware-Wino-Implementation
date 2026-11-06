@@ -1,0 +1,17 @@
+model,platform,baseline,threads,mean_ms,CI95,std_ms,p_value,pct_improvement,n_runs
+AlexNet,rpi4,cachewinograd,4,101.2865,1.4122,5.0949,N/A,N/A,50
+AlexNet,rpi4,nonfused_winograd,4,180.5468,2.8683,10.3481,< 1e-10,43.9,50
+AlexNet,rpi4,neon_direct,4,184.0044,0.8112,2.9264,< 1e-10,44.95,50
+AlexNet,rpi4,onnxruntime,4,118.0003,1.269,4.578,< 1e-10,14.16,50
+ResNet-18,rpi4,cachewinograd,4,392.0795,2.6058,9.401,N/A,N/A,50
+ResNet-18,rpi4,nonfused_winograd,4,487.2177,3.6184,13.0541,< 1e-10,19.53,50
+ResNet-18,rpi4,neon_direct,4,758.5297,0.736,2.6551,< 1e-10,48.31,50
+ResNet-18,rpi4,onnxruntime,4,148.4501,0.4116,1.4848,< 1e-10,-164.12,50
+ResNet-34,rpi4,cachewinograd,4,795.6854,3.181,11.4761,N/A,N/A,50
+ResNet-34,rpi4,nonfused_winograd,4,1083.4307,5.1943,18.7395,< 1e-10,26.56,50
+ResNet-34,rpi4,neon_direct,4,1620.2065,1.7844,6.4374,< 1e-10,50.89,50
+ResNet-34,rpi4,onnxruntime,4,296.1589,0.6412,2.3132,< 1e-10,-168.67,50
+VGG16,rpi4,cachewinograd,4,3348.5289,23.702,85.5093,N/A,N/A,50
+VGG16,rpi4,nonfused_winograd,4,3886.4666,18.1781,65.5809,< 1e-10,13.84,50
+VGG16,rpi4,neon_direct,4,11095.2312,276.8215,998.6857,< 1e-10,69.82,50
+VGG16,rpi4,onnxruntime,4,1224.6745,9.8422,35.5077,< 1e-10,-173.42,50
