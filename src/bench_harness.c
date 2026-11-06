@@ -766,8 +766,9 @@ void conv2d_v4_pretransformed_packed(
  *   M[tile][bin][co] = sum over ci of U[bin][co][ci] * V[tile][bin][ci]
  * Weights are packed by bin. A block of g_v5_kc input channels for 8 output
  * channels is applied to every tile in a batch, so it stays in cache instead of
- * each tile streaming the whole table. --batch 1 gives one-tile-at-a-time fusion
- * with the same inner loop.
+ * each tile streaming the whole table. With enough tiles, each thread owns its
+ * own batches. With few tiles, threads share one batch and split the weight
+ * blocks. --batch 1 gives one-tile-at-a-time fusion with the same inner loop.
  * ------------------------------------------------------------------------- */
 typedef float v4f __attribute__((vector_size(16), aligned(4), may_alias));
 
@@ -823,6 +824,80 @@ static inline void v5_mul_block(const float* restrict U, const float* restrict V
     *(v4f*)(M + 16) = a4; *(v4f*)(M + 20) = a5; *(v4f*)(M + 24) = a6; *(v4f*)(M + 28) = a7;
 }
 
+/* Input transform for tile t, scattered into bin order at batch slot i */
+static inline void v5_input_tile(int m, const float* input, float* V, int i, int t,
+                                 int H, int W, int Cin, int Tw) {
+    int alpha = m + 2;
+    int alpha2 = alpha * alpha;
+    int nb = alpha2 / 4;
+    int h_start = (t / Tw) * m;
+    int w_start = (t % Tw) * m;
+    for (int ci = 0; ci < Cin; ci++) {
+        float d[64], v[64];
+        for (int r = 0; r < alpha; r++) {
+            for (int c = 0; c < alpha; c++) {
+                int ih = h_start + r;
+                int iw = w_start + c;
+                d[r * alpha + c] = (ih < H && iw < W) ? input[ci * H * W + ih * W + iw] : 0.0f;
+            }
+        }
+        transform_input_tile(m, d, v);
+        for (int k = 0; k < alpha2; k++) {
+            V[(((size_t)i * nb + k / 4) * Cin + ci) * 4 + k % 4] = v[k];
+        }
+    }
+}
+
+/* Apply one bin and output-channel block of weights to nt tiles, one cache block
+ * at a time, so each block is reused by every tile */
+static inline void v5_multiply(const float* U_p, const float* V, float* Mb, int bin, int cb,
+                               int nt, int nb, int ncb, int Cin) {
+    for (int ci0 = 0; ci0 < Cin; ci0 += g_v5_kc) {
+        int nci = (ci0 + g_v5_kc <= Cin) ? g_v5_kc : Cin - ci0;
+        const float* U_blk = U_p + (((size_t)bin * ncb + cb) * Cin + ci0) * 32;
+        for (int i = 0; i < nt; i++) {
+            size_t tile_bin = (size_t)i * nb + bin;
+            v5_mul_block(U_blk, V + (tile_bin * Cin + ci0) * 4,
+                         Mb + (tile_bin * ncb + cb) * 32, nci);
+        }
+    }
+}
+
+/* Output transform for tile t from batch slot i */
+static inline void v5_output_tile(int m, const float* Mb, float* output, int i, int t,
+                                  int Hout, int Wout, int Cout, int Tw) {
+    int alpha2 = (m + 2) * (m + 2);
+    int nb = alpha2 / 4;
+    int ncb = (Cout + 7) / 8;
+    int h_start = (t / Tw) * m;
+    int w_start = (t % Tw) * m;
+    for (int co = 0; co < Cout; co++) {
+        float m_tile[64], y[36];
+        for (int k = 0; k < alpha2; k++) {
+            m_tile[k] = Mb[((((size_t)i * nb + k / 4) * ncb + co / 8) * 8 + co % 8) * 4 + k % 4];
+        }
+        transform_output_tile(m, m_tile, y);
+        for (int r = 0; r < m; r++) {
+            for (int c = 0; c < m; c++) {
+                int oh = h_start + r;
+                int ow = w_start + c;
+                if (oh < Hout && ow < Wout) {
+                    output[co * Hout * Wout + oh * Wout + ow] = y[r * m + c];
+                }
+            }
+        }
+    }
+}
+
+static float* v5_alloc(size_t elems) {
+    float* p = NULL;
+    if (posix_memalign((void**)&p, 64, elems * sizeof(float)) != 0) {
+        fprintf(stderr, "FATAL: v5_batched allocation failed\n");
+        exit(4);
+    }
+    return p;
+}
+
 void conv2d_v5_batched(
     int m,
     const float* input,
@@ -834,8 +909,7 @@ void conv2d_v5_batched(
     const char** executed_path)
 {
     *executed_path = "v5_batched";
-    int alpha = m + 2;
-    int alpha2 = alpha * alpha;
+    int alpha2 = (m + 2) * (m + 2);
     int nb = alpha2 / 4;
     int ncb = (Cout + 7) / 8;
     int Hout = H - 2;
@@ -846,85 +920,56 @@ void conv2d_v5_batched(
     size_t table_bytes = (size_t)Cin * Cout * alpha2 * sizeof(float);
     int batch = g_v5_batch > 0 ? g_v5_batch
               : (table_bytes > V5_L2_BYTES ? V5_BATCH_EXCEEDS_L2 : V5_BATCH_FITS_L2);
-    if (batch > N_tiles / T) batch = N_tiles / T;
-    if (batch < 1) batch = 1;
-    int n_batches = (N_tiles + batch - 1) / batch;
 
+    if (N_tiles / T < batch) {
+        /* Too few tiles for each thread to have a batch, so all threads share one
+         * and split the weight blocks instead of competing for the same ones. */
+        float* V = v5_alloc((size_t)N_tiles * nb * Cin * 4);
+        float* Mb = v5_alloc((size_t)N_tiles * nb * ncb * 32);
+        memset(Mb, 0, (size_t)N_tiles * nb * ncb * 32 * sizeof(float));
+        #pragma omp parallel num_threads(T)
+        {
+            #pragma omp for schedule(dynamic)
+            for (int t = 0; t < N_tiles; t++) {
+                v5_input_tile(m, input, V, t, t, H, W, Cin, Tw);
+            }
+            #pragma omp for collapse(2) schedule(dynamic)
+            for (int bin = 0; bin < nb; bin++) {
+                for (int cb = 0; cb < ncb; cb++) {
+                    v5_multiply(U_p, V, Mb, bin, cb, N_tiles, nb, ncb, Cin);
+                }
+            }
+            #pragma omp for schedule(dynamic)
+            for (int t = 0; t < N_tiles; t++) {
+                v5_output_tile(m, Mb, output, t, t, Hout, Wout, Cout, Tw);
+            }
+        }
+        free(V);
+        free(Mb);
+        return;
+    }
+
+    int n_batches = (N_tiles + batch - 1) / batch;
     #pragma omp parallel num_threads(T)
     {
-        size_t v_elems = (size_t)batch * nb * Cin * 4;
-        size_t m_elems = (size_t)batch * nb * ncb * 32;
-        float* V = NULL;
-        float* Mb = NULL;
-        if (posix_memalign((void**)&V, 64, v_elems * sizeof(float)) != 0 ||
-            posix_memalign((void**)&Mb, 64, m_elems * sizeof(float)) != 0) {
-            fprintf(stderr, "FATAL: v5_batched allocation failed\n");
-            exit(4);
-        }
+        float* V = v5_alloc((size_t)batch * nb * Cin * 4);
+        float* Mb = v5_alloc((size_t)batch * nb * ncb * 32);
 
         #pragma omp for schedule(dynamic)
         for (int b = 0; b < n_batches; b++) {
             int t0 = b * batch;
             int nt = (t0 + batch <= N_tiles) ? batch : N_tiles - t0;
-
-            /* Input transform for each tile, scattered into bin order */
             for (int i = 0; i < nt; i++) {
-                int t = t0 + i;
-                int h_start = (t / Tw) * m;
-                int w_start = (t % Tw) * m;
-                for (int ci = 0; ci < Cin; ci++) {
-                    float d[64], v[64];
-                    for (int r = 0; r < alpha; r++) {
-                        for (int c = 0; c < alpha; c++) {
-                            int ih = h_start + r;
-                            int iw = w_start + c;
-                            d[r * alpha + c] = (ih < H && iw < W) ? input[ci * H * W + ih * W + iw] : 0.0f;
-                        }
-                    }
-                    transform_input_tile(m, d, v);
-                    for (int k = 0; k < alpha2; k++) {
-                        V[(((size_t)i * nb + k / 4) * Cin + ci) * 4 + k % 4] = v[k];
-                    }
-                }
+                v5_input_tile(m, input, V, i, t0 + i, H, W, Cin, Tw);
             }
-
-            /* Multiply: each weight block is reused by every tile in the batch */
             memset(Mb, 0, (size_t)nt * nb * ncb * 32 * sizeof(float));
             for (int bin = 0; bin < nb; bin++) {
                 for (int cb = 0; cb < ncb; cb++) {
-                    for (int ci0 = 0; ci0 < Cin; ci0 += g_v5_kc) {
-                        int nci = (ci0 + g_v5_kc <= Cin) ? g_v5_kc : Cin - ci0;
-                        const float* U_blk = U_p + (((size_t)bin * ncb + cb) * Cin + ci0) * 32;
-                        for (int i = 0; i < nt; i++) {
-                            size_t tile_bin = (size_t)i * nb + bin;
-                            v5_mul_block(U_blk, V + (tile_bin * Cin + ci0) * 4,
-                                         Mb + (tile_bin * ncb + cb) * 32, nci);
-                        }
-                    }
+                    v5_multiply(U_p, V, Mb, bin, cb, nt, nb, ncb, Cin);
                 }
             }
-
-            /* Output transform for each tile */
             for (int i = 0; i < nt; i++) {
-                int t = t0 + i;
-                int h_start = (t / Tw) * m;
-                int w_start = (t % Tw) * m;
-                for (int co = 0; co < Cout; co++) {
-                    float m_tile[64], y[36];
-                    for (int k = 0; k < alpha2; k++) {
-                        m_tile[k] = Mb[((((size_t)i * nb + k / 4) * ncb + co / 8) * 8 + co % 8) * 4 + k % 4];
-                    }
-                    transform_output_tile(m, m_tile, y);
-                    for (int r = 0; r < m; r++) {
-                        for (int c = 0; c < m; c++) {
-                            int oh = h_start + r;
-                            int ow = w_start + c;
-                            if (oh < Hout && ow < Wout) {
-                                output[co * Hout * Wout + oh * Wout + ow] = y[r * m + c];
-                            }
-                        }
-                    }
-                }
+                v5_output_tile(m, Mb, output, i, t0 + i, Hout, Wout, Cout, Tw);
             }
         }
         free(V);
