@@ -2,29 +2,26 @@
 """
 T4 — Raspberry Pi 4 adaptive-m sweep.
 
-Runs all 7 microbenchmark configs at m=2 and m=6 on Raspberry Pi 4
-(existing m=4 data stays as-is), n>=30 per config.
+Runs all 7 microbenchmark configs at m=2, 4 and 6 on Raspberry Pi 4 using the
+fused C kernel in src/bench_harness.c, n>=30 per config.
 
 For each config, verifies the adaptive policy's m* selection logic
 (WS_ext <= gamma*C_cache) picks the same m that empirically performs best.
 
-Logs to raw_logs/rpi4_adaptive_m_sweep.csv.
+Logs to raw_logs/harness/rpi4_adaptive_m_sweep.csv.
 
 MUST be executed on a Raspberry Pi 4 device.
 """
 import os
 import sys
-import time
-import datetime
 import argparse
 import csv
 
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from src.fused_winograd_kernel import FusedWinogradKernel
+from src.harness_runner import measure
 from src.cache_adaptive_autotiler import CacheAdaptiveAutotiler
-from src.locality_scheduler import LocalityScheduler
 from src.runtime_cache_probe import build_platform_descriptor
 
 # All 7 microbenchmark configs from the paper
@@ -39,7 +36,7 @@ CONFIGS = [
 ]
 
 # Candidate m values -> tile_dim = m + r - 1 = m + 2
-M_VALUES = [2, 6]  # m=4 (tile=6) data stays as-is
+M_VALUES = [2, 4, 6]
 
 
 def _tile_dim_from_m(m):
@@ -47,7 +44,7 @@ def _tile_dim_from_m(m):
     return m + 2
 
 
-def run_sweep(n_runs=30, warmup=10, h=14, w=14):
+def run_sweep(n_runs=30, warmup=10, h=14, w=14, threads=4):
     """Run the adaptive-m sweep."""
     from scipy import stats as sp_stats
 
@@ -55,16 +52,12 @@ def run_sweep(n_runs=30, warmup=10, h=14, w=14):
     print(f"[T4] RPi4 Adaptive-m Sweep")
     print(f"     Platform: {platform.get('os', 'unknown')} / {platform.get('cpu_model', 'unknown')}")
     print(f"     L1D: {platform.get('l1d_size_bytes', 'N/A')}B, L2: {platform.get('l2_size_bytes', 'N/A')}B")
-    print(f"     Configs: {len(CONFIGS)}, m values: {M_VALUES}, Runs: {n_runs}")
-
-    kernel = FusedWinogradKernel()
-    scheduler = LocalityScheduler()
+    print(f"     Configs: {len(CONFIGS)}, m values: {M_VALUES}, Runs: {n_runs}, Threads: {threads}")
 
     # Build tiler with the detected platform
     tiler = CacheAdaptiveAutotiler(platform_descriptor=platform)
 
-    timestamp = datetime.datetime.now().isoformat()
-    raw_rows = []
+    raw_path = os.path.join("raw_logs", "harness", "rpi4_adaptive_m_sweep.csv")
     verification_rows = []
 
     for cfg in CONFIGS:
@@ -88,36 +81,9 @@ def run_sweep(n_runs=30, warmup=10, h=14, w=14):
             tile_name = f"F({m},3)"
             print(f"    Running m={m} ({tile_name}, tile_dim={tile_dim})...")
 
-            tasks = scheduler.generate_tile_tasks(h, w, tile_dim, c_in, c_out)
-            ordered_tasks = scheduler.group_tasks_by_channel_locality(tasks)
-
-            np.random.seed(42)
-            input_tile = np.random.randn(c_in, tile_dim, tile_dim).astype(np.float32)
-            U = np.random.randn(c_out, c_in, tile_dim, tile_dim).astype(np.float32)
-
-            # Warmup
-            for _ in range(warmup):
-                for _ in ordered_tasks[:min(10, len(ordered_tasks))]:
-                    kernel.run_fused(input_tile, U)
-
-            # Measurement — CLOCK_MONOTONIC via time.monotonic()
-            latencies = []
-            for run_id in range(n_runs):
-                t0 = time.monotonic()
-                for task in ordered_tasks:
-                    kernel.run_fused(input_tile, U)
-                t1 = time.monotonic()
-                duration_ms = (t1 - t0) * 1000.0
-                latencies.append(duration_ms)
-
-                raw_rows.append({
-                    "timestamp": timestamp,
-                    "c_in": c_in, "c_out": c_out,
-                    "m": m, "tile_dim": tile_dim, "tile_name": tile_name,
-                    "h": h, "w": w,
-                    "run_id": run_id,
-                    "latency_ms": duration_ms,
-                })
+            latencies = measure("fused", m, threads, h, w, c_in, c_out, n_runs, warmup,
+                                cell_id=f"N_fused_m{m}_T{threads}_c{c_in}x{c_out}",
+                                raw_path=raw_path)
 
             mean_lat = float(np.mean(latencies))
             std_lat = float(np.std(latencies, ddof=1))
@@ -152,28 +118,22 @@ def run_sweep(n_runs=30, warmup=10, h=14, w=14):
             "policy_m": policy_m,
             "policy_tile": policy_name,
             "policy_ws": policy_ws,
+            "threads": threads,
             "empirical_best_m": best_m,
             "m2_mean_ms": round(m_results.get(2, {}).get("mean", float("nan")), 4),
             "m2_ci95_ms": round(m_results.get(2, {}).get("ci95", float("nan")), 4),
+            "m4_mean_ms": round(m_results.get(4, {}).get("mean", float("nan")), 4),
+            "m4_ci95_ms": round(m_results.get(4, {}).get("ci95", float("nan")), 4),
             "m6_mean_ms": round(m_results.get(6, {}).get("mean", float("nan")), 4),
             "m6_ci95_ms": round(m_results.get(6, {}).get("ci95", float("nan")), 4),
             "p_value_m2_vs_m6": p_m2_m6_str,
             "policy_matches_empirical": policy_matches,
         })
 
-    # Write raw log (append)
-    raw_path = os.path.join("raw_logs", "rpi4_adaptive_m_sweep.csv")
-    os.makedirs(os.path.dirname(raw_path), exist_ok=True)
-    file_exists = os.path.exists(raw_path) and os.path.getsize(raw_path) > 0
-    with open(raw_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(raw_rows[0].keys()))
-        if not file_exists:
-            writer.writeheader()
-        writer.writerows(raw_rows)
-    print(f"\n[T4] Appended {len(raw_rows)} rows to {raw_path}")
+    print(f"\n[T4] Raw: {raw_path}")
 
     # Write verification summary
-    summary_path = os.path.join("summary", "rpi4_adaptive_m_verification.csv")
+    summary_path = os.path.join("summary", "harness", "rpi4_adaptive_m_verification.csv")
     os.makedirs(os.path.dirname(summary_path), exist_ok=True)
     with open(summary_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(verification_rows[0].keys()))
@@ -188,8 +148,9 @@ def main():
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--height", type=int, default=14)
     parser.add_argument("--width", type=int, default=14)
+    parser.add_argument("--threads", type=int, default=4)
     args = parser.parse_args()
-    run_sweep(n_runs=args.runs, warmup=args.warmup, h=args.height, w=args.width)
+    run_sweep(n_runs=args.runs, warmup=args.warmup, h=args.height, w=args.width, threads=args.threads)
 
 
 if __name__ == "__main__":

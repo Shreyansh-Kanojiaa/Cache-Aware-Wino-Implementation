@@ -199,9 +199,9 @@ taskL: dirs
 # ============================================================================
 taskM: dirs
 	$(PYTHON) benchmarks/rpi4_main_microbench.py \
-		--runs 30 --warmup 10 \
-		--raw $(RAW_LOGS)/rpi4_main_microbench.csv \
-		--summary $(SUMMARY)/rpi4_main_microbench_summary.csv
+		--runs 30 --warmup 10 --threads 1,4 \
+		--raw $(RAW_LOGS)/harness/rpi4_main_microbench.csv \
+		--summary $(SUMMARY)/harness/rpi4_main_microbench_summary.csv
 
 # ============================================================================
 # Task N: RPi4 adaptive-m sweep (m=2 and m=6; m=4 data from task M)

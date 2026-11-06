@@ -2,23 +2,26 @@
 """
 T5 — End-to-end CacheWinograd benchmarking.
 
-Integrates the CacheWinograd fused kernel into a full-model inference path.
-Uses a layer-wise approach: extract each 3×3 conv layer's shape, run it
-through CacheWinograd, sum layer times for CacheWinograd E2E estimate.
-Baselines run full-model ONNX Runtime / TVM / ArmCL inference.
+Runs each 3x3 conv layer through the C kernels in src/bench_harness.c (OpenMP,
+--threads cores), then sums the per-layer times for each run.
 
-METHODOLOGY NOTE (REQUIRED by paper protocol, constraint #5):
-  CacheWinograd end-to-end latency is a layer-time aggregate of isolated
-  per-layer kernel measurements, NOT a single fused end-to-end trace.
-  Baseline end-to-end numbers (ORT, TVM, ArmCL) ARE true single-process
-  runs. This asymmetry is intentional and must not be hidden in reporting.
+METHODOLOGY NOTE:
+  Winograd and direct numbers are layer-time aggregates of 3x3 convs measured
+  separately, with each layer's own warmup. They exclude every other op (1x1,
+  7x7 and 11x11 convs, pooling, FC), and cache effects between layers. ORT and
+  TVM ARE full-model single-process runs, so those comparisons are not like for
+  like.
+
+  Stride-2 layers can't use Winograd, so all kernels run them as neon_direct
+  with the same output size.
 
 Models: AlexNet, ResNet-18, ResNet-34, VGG16
-Baselines: naive_winograd, nonfused_winograd, tvm, autotvm, armcl, onnxruntime
+Baselines: nonfused_winograd, neon_direct, onnxruntime, tvm, autotvm
 n=50 minimum per model per platform.
 
-Logs raw per-run latency to raw_logs/e2e_<model>_<platform>.csv
-Produces summary/e2e_comparison_table.csv.
+Logs raw per-run latency to raw_logs/harness/e2e_<model>_<platform>.csv and
+per-layer rows to raw_logs/harness/e2e_<model>_<platform>_layers.csv.
+Produces summary/harness/e2e_comparison_T<threads>.csv.
 """
 import os
 import sys
@@ -32,7 +35,7 @@ import tempfile
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from src.fused_winograd_kernel import FusedWinogradKernel
+from src.harness_runner import conv_output_size, measure
 from src.cache_adaptive_autotiler import CacheAdaptiveAutotiler
 from src.runtime_cache_probe import build_platform_descriptor
 
@@ -203,98 +206,29 @@ def _get_conv3x3_layers_hardcoded(model_name):
     return []
 
 
-def _run_cachewinograd_layer(kernel, tiler, c_in, c_out, h, w, tile_dim):
-    """Run CacheWinograd fused kernel for a single layer, return latency in ms."""
-    from src.locality_scheduler import LocalityScheduler
-    scheduler = LocalityScheduler()
-    tasks = scheduler.generate_tile_tasks(h, w, tile_dim, c_in, c_out)
-    ordered_tasks = scheduler.group_tasks_by_channel_locality(tasks)
-
-    input_tile = np.random.randn(c_in, tile_dim, tile_dim).astype(np.float32)
-    U = np.random.randn(c_out, c_in, tile_dim, tile_dim).astype(np.float32)
-
-    t0 = time.perf_counter()
-    for task in ordered_tasks:
-        kernel.run_fused(input_tile, U)
-    t1 = time.perf_counter()
-    return (t1 - t0) * 1000.0
-
-
-def _run_naive_winograd_layer(kernel, c_in, c_out, h, w, tile_dim):
-    """Run naive (non-fused) Winograd for a single layer."""
-    from src.locality_scheduler import LocalityScheduler
-    scheduler = LocalityScheduler()
-    tasks = scheduler.generate_tile_tasks(h, w, tile_dim, c_in, c_out)
-    ordered_tasks = scheduler.group_tasks_by_channel_locality(tasks)
-
-    input_tile = np.random.randn(c_in, tile_dim, tile_dim).astype(np.float32)
-    U = np.random.randn(c_out, c_in, tile_dim, tile_dim).astype(np.float32)
-
-    t0 = time.perf_counter()
-    for task in ordered_tasks:
-        kernel.run_non_fused(input_tile, U)
-    t1 = time.perf_counter()
-    return (t1 - t0) * 1000.0
-
-
-def benchmark_cachewinograd_e2e(model_name, n_runs, warmup, conv_layers):
-    """Layer-wise CacheWinograd E2E benchmark."""
-    kernel = FusedWinogradKernel()
+def benchmark_harness_e2e(model_name, variant, n_runs, warmup, conv_layers, threads,
+                          platform_name):
+    """Sum per-layer harness latencies for each run."""
     tiler = CacheAdaptiveAutotiler()
-
-    # Warmup
-    for _ in range(warmup):
-        for layer in conv_layers[:3]:
-            decision = tiler.select_best_tile(layer["c_in"], layer["c_out"])
-            td = decision["selected_tile"]["tile"]
-            _run_cachewinograd_layer(kernel, tiler, layer["c_in"], layer["c_out"],
-                                     layer["h_in"], layer["w_in"], td)
-
-    latencies = []
-    for run_id in range(n_runs):
-        total_ms = 0.0
-        for layer in conv_layers:
-            # Only handle stride=1 3×3 convs; stride>1 falls back
-            if layer.get("stride", 1) > 1:
-                # Fallback: direct conv estimate (we just run non-fused as proxy)
-                decision = tiler.select_best_tile(layer["c_in"], layer["c_out"])
-                td = decision["selected_tile"]["tile"]
-                total_ms += _run_naive_winograd_layer(kernel, layer["c_in"], layer["c_out"],
-                                                       layer["h_in"], layer["w_in"], td)
-            else:
-                decision = tiler.select_best_tile(layer["c_in"], layer["c_out"])
-                td = decision["selected_tile"]["tile"]
-                total_ms += _run_cachewinograd_layer(kernel, tiler, layer["c_in"], layer["c_out"],
-                                                      layer["h_in"], layer["w_in"], td)
-        latencies.append(total_ms)
-    return latencies
+    raw_path = os.path.join("raw_logs", "harness", f"e2e_{model_name}_{platform_name}_layers.csv")
+    totals = np.zeros(n_runs)
+    for i, layer in enumerate(conv_layers):
+        stride = layer.get("stride", 1)
+        padding = layer.get("padding", 1)
+        # ponytail: stride-2 is timed as a stride-1 direct conv with the same output
+        # size, which matches its work but not its memory stride. Add stride to the
+        # harness if these layers ever matter.
+        use = "neon_direct" if stride > 1 else variant
+        td = tiler.select_best_tile(layer["c_in"], layer["c_out"])["selected_tile"]["tile"]
+        totals += measure(use, td - 2, threads,
+                          conv_output_size(layer["h_in"], stride, padding),
+                          conv_output_size(layer["w_in"], stride, padding),
+                          layer["c_in"], layer["c_out"], n_runs, warmup, board=platform_name,
+                          cell_id=f"{model_name}_L{i}_{variant}_T{threads}", raw_path=raw_path)
+    return totals.tolist()
 
 
-def benchmark_naive_winograd_e2e(model_name, n_runs, warmup, conv_layers):
-    """Non-fused Winograd E2E benchmark."""
-    kernel = FusedWinogradKernel()
-    tiler = CacheAdaptiveAutotiler()
-
-    for _ in range(warmup):
-        for layer in conv_layers[:3]:
-            decision = tiler.select_best_tile(layer["c_in"], layer["c_out"])
-            td = decision["selected_tile"]["tile"]
-            _run_naive_winograd_layer(kernel, layer["c_in"], layer["c_out"],
-                                      layer["h_in"], layer["w_in"], td)
-
-    latencies = []
-    for run_id in range(n_runs):
-        total_ms = 0.0
-        for layer in conv_layers:
-            decision = tiler.select_best_tile(layer["c_in"], layer["c_out"])
-            td = decision["selected_tile"]["tile"]
-            total_ms += _run_naive_winograd_layer(kernel, layer["c_in"], layer["c_out"],
-                                                   layer["h_in"], layer["w_in"], td)
-        latencies.append(total_ms)
-    return latencies
-
-
-def benchmark_onnxruntime_e2e(model_name, n_runs, warmup):
+def benchmark_onnxruntime_e2e(model_name, n_runs, warmup, threads):
     """Full-model ONNX Runtime baseline."""
     if not ORT_AVAILABLE:
         return None
@@ -310,7 +244,10 @@ def benchmark_onnxruntime_e2e(model_name, n_runs, warmup):
             return None
 
     try:
-        session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = threads
+        options.inter_op_num_threads = 1
+        session = ort.InferenceSession(onnx_path, options, providers=["CPUExecutionProvider"])
     except Exception as e:
         print(f"     [onnxruntime] Failed to load {onnx_path}: {e}")
         return None
@@ -427,38 +364,7 @@ def benchmark_tvm_e2e(model_name, n_runs, warmup, tvm_target=None, autotvm=False
     return latencies
 
 
-def benchmark_armcl_e2e(model_name, n_runs, warmup, conv_layers):
-    """Full-model ArmCL baseline (layer-time aggregate via ArmCL runner)."""
-    import subprocess
-    import re
-
-    armcl_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools", "run_armcl.sh"))
-    if not os.path.exists(armcl_script):
-        return None
-
-    layer_lats = []
-    for layer in conv_layers:
-        c_in = layer.get("c_in", 64)
-        c_out = layer.get("c_out", 64)
-        h = layer.get("h_in", 56)
-        w = layer.get("w_in", 56)
-        cmd = f'"{armcl_script}" {c_in} {c_out} {h} {w} 3 1 0'
-        try:
-            res = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=10)
-            m = re.search(r"LATENCY_MS\s*=\s*([0-9]+(?:\.[0-9]+)?)", res.stdout + res.stderr)
-            if m:
-                layer_lats.append(float(m.group(1)))
-            else:
-                layer_lats.append(0.5)
-        except Exception:
-            layer_lats.append(0.5)
-
-    base_total = sum(layer_lats)
-    noise = np.random.normal(0, max(0.1, base_total * 0.008), n_runs)
-    return [max(0.1, base_total + float(n)) for n in noise]
-
-
-def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_target=None):
+def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_target=None, threads=4):
     """Run full E2E benchmarks."""
     from scipy import stats as sp_stats
 
@@ -467,6 +373,7 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
     if platform_name is None:
         platform_name = _detect_platform_name()
 
+    os.environ["TVM_NUM_THREADS"] = str(threads)
     timestamp = datetime.datetime.now().isoformat()
     all_raw_rows = []
     summary_rows = []
@@ -483,26 +390,27 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
 
         baselines = {}
 
-        # 1. CacheWinograd (fused) — LAYER-TIME AGGREGATE, not a single trace
-        print(f"     Running CacheWinograd fused (layer-time aggregate)...")
-        cw_lats = benchmark_cachewinograd_e2e(model_name, n_runs, warmup, conv_layers)
+        # 1. CacheWinograd (fused) — layer-time aggregate, not a single trace
+        print(f"     Running CacheWinograd fused on {threads} thread(s)...")
+        cw_lats = benchmark_harness_e2e(model_name, "fused", n_runs, warmup, conv_layers,
+                                        threads, platform_name)
         baselines["cachewinograd"] = cw_lats
         cw_mean = float(np.mean(cw_lats))
         print(f"       mean={cw_mean:.2f}ms  [layer-time aggregate, NOT a single e2e trace]")
 
-        # 2. Naive Winograd (non-fused) — also layer aggregate
-        print(f"     Running Naive Winograd...")
-        nw_lats = benchmark_naive_winograd_e2e(model_name, n_runs, warmup, conv_layers)
-        baselines["naive_winograd"] = list(nw_lats)  # copy, not alias
+        # 2. Non-fused Winograd
+        print(f"     Running Non-fused Winograd...")
+        baselines["nonfused_winograd"] = benchmark_harness_e2e(
+            model_name, "unfused", n_runs, warmup, conv_layers, threads, platform_name)
 
-        # 3. Non-fused Winograd — independent run (NOT aliased to naive)
-        print(f"     Running Non-fused Winograd (independent run)...")
-        nonfused_lats = benchmark_naive_winograd_e2e(model_name, n_runs, warmup, conv_layers)
-        baselines["nonfused_winograd"] = nonfused_lats
+        # 3. Direct convolution
+        print(f"     Running direct conv...")
+        baselines["neon_direct"] = benchmark_harness_e2e(
+            model_name, "neon_direct", n_runs, warmup, conv_layers, threads, platform_name)
 
         # 4. ONNX Runtime
         print(f"     Running ONNX Runtime...")
-        ort_lats = benchmark_onnxruntime_e2e(model_name, n_runs, warmup)
+        ort_lats = benchmark_onnxruntime_e2e(model_name, n_runs, warmup, threads)
         if ort_lats:
             baselines["onnxruntime"] = ort_lats
         else:
@@ -524,14 +432,6 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
         else:
             print(f"       SKIPPED (not available)")
 
-        # 7. ArmCL
-        print(f"     Running ArmCL...")
-        armcl_lats = benchmark_armcl_e2e(model_name, n_runs, warmup, conv_layers)
-        if armcl_lats:
-            baselines["armcl"] = armcl_lats
-        else:
-            print(f"       SKIPPED (not available)")
-
         # Log raw data
         for bl_name, lats in baselines.items():
             if lats is None:
@@ -542,6 +442,7 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
                     "model": model_name,
                     "platform": platform_name,
                     "baseline": bl_name,
+                    "threads": threads,
                     "run_id": run_id,
                     "latency_ms": lat,
                 })
@@ -565,6 +466,7 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
                 "model": display,
                 "platform": platform_name,
                 "baseline": bl_name,
+                "threads": threads,
                 "mean_ms": round(mean_ms, 4),
                 "CI95": round(ci95, 4),
                 "std_ms": round(std_ms, 4),
@@ -574,7 +476,7 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
             })
 
         # Write per-model raw log (append)
-        raw_path = os.path.join("raw_logs", f"e2e_{model_name}_{platform_name}.csv")
+        raw_path = os.path.join("raw_logs", "harness", f"e2e_{model_name}_{platform_name}.csv")
         os.makedirs(os.path.dirname(raw_path), exist_ok=True)
         model_rows = [r for r in all_raw_rows if r["model"] == model_name]
         if model_rows:
@@ -590,7 +492,7 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
     # (accumulate summary_rows across all models, then write once
     # so a mid-run failure does not truncate earlier models' data)
     if summary_rows:
-        summary_path = os.path.join("summary", "e2e_comparison_table.csv")
+        summary_path = os.path.join("summary", "harness", f"e2e_comparison_T{threads}.csv")
         os.makedirs(os.path.dirname(summary_path), exist_ok=True)
         with open(summary_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(summary_rows[0].keys()))
@@ -598,7 +500,7 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
             writer.writerows(summary_rows)
         print(f"\n[T5] E2E summary written to {summary_path}")
         print("[T5] METHODOLOGY: CacheWinograd E2E = layer-time aggregate; "
-              "ORT/TVM/ArmCL = true single-process runs.")
+              "ORT/TVM = true single-process runs.")
 
 
 def main():
@@ -610,11 +512,12 @@ def main():
     parser.add_argument("--platform", default=None,
                         help="Platform name override (e.g., jetson_nano, rpi4)")
     parser.add_argument("--tvm-target", default=None)
+    parser.add_argument("--threads", type=int, default=4)
     args = parser.parse_args()
 
     model_list = MODELS if args.models == "all" else [m.strip() for m in args.models.split(",")]
     run_e2e(model_list=model_list, n_runs=args.runs, warmup=args.warmup,
-            platform_name=args.platform, tvm_target=args.tvm_target)
+            platform_name=args.platform, tvm_target=args.tvm_target, threads=args.threads)
 
 
 if __name__ == "__main__":

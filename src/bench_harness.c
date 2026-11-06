@@ -788,6 +788,8 @@ int run_harness_selftest(void) {
     printf("==============================================================\n");
 
     int H = 8, W = 8, Cin = 4, Cout = 4, T = 1;
+    int test_T_vals[] = {1, 4};
+    int test_m_vals[] = {2, 4, 6};
     int Hout = H - 2, Wout = W - 2;
     size_t in_sz = Cin * H * W;
     size_t w_sz = Cout * Cin * 9;
@@ -811,8 +813,11 @@ int run_harness_selftest(void) {
     /* Test all variants across m in {2, 4, 6} */
     const char* variants[] = {"neon_direct", "unfused", "fused", "v2_regblocked", "v3_cin_blocked", "v4_pretransformed_packed"};
     int n_var = sizeof(variants) / sizeof(variants[0]);
-    int test_m_vals[] = {2, 4}; /* m=6 needs H>=8, W>=8 which matches 8x8 */
 
+    for (int ti = 0; ti < 2; ti++) {
+    T = test_T_vals[ti];
+    for (int mi = 0; mi < 3; mi++) {
+    int m = test_m_vals[mi];
     for (int vi = 0; vi < n_var; vi++) {
         const char* req = variants[vi];
         memset(out, 0, out_sz * sizeof(float));
@@ -820,7 +825,6 @@ int run_harness_selftest(void) {
         if (strcmp(req, "neon_direct") == 0) {
             conv2d_neon_direct(in, w, out, H, W, Cin, Cout, T, &path);
         } else {
-            int m = 2;
             int alpha = m + 2;
             float* U = (float*)malloc((size_t)Cout * Cin * alpha * alpha * sizeof(float));
             transform_weights(m, Cin, Cout, w, U);
@@ -849,32 +853,13 @@ int run_harness_selftest(void) {
             float err = fabsf(ref[i] - out[i]);
             if (err > max_err) max_err = err;
         }
-        printf("  Variant %-26s -> Path: %-12s | Max Err vs Ref: %.4e\n", req, path, max_err);
+        printf("  Variant %-26s m=%d T=%d -> Path: %-12s | Max Err vs Ref: %.4e\n", req, m, T, path, max_err);
         if (max_err > 1e-3f) {
-            fprintf(stderr, "FATAL: Gate G1 Correctness Failure for variant '%s' (max_err=%.4e)\n", req, max_err);
+            fprintf(stderr, "FATAL: Gate G1 Correctness Failure for variant '%s' m=%d T=%d (max_err=%.4e)\n", req, m, T, max_err);
             return 1;
         }
     }
-
-    /* Also verify m=4 */
-    {
-        int m = 4;
-        int alpha = m + 2;
-        float* U = (float*)malloc((size_t)Cout * Cin * alpha * alpha * sizeof(float));
-        transform_weights(m, Cin, Cout, w, U);
-        memset(out, 0, out_sz * sizeof(float));
-        conv2d_fused_winograd(m, in, U, out, H, W, Cin, Cout, T, &path);
-        float max_err = 0.0f;
-        for (size_t i = 0; i < out_sz; i++) {
-            float err = fabsf(ref[i] - out[i]);
-            if (err > max_err) max_err = err;
-        }
-        printf("  Variant fused (m=4)                -> Path: %-12s | Max Err vs Ref: %.4e\n", path, max_err);
-        free(U);
-        if (max_err > 1e-3f) {
-            fprintf(stderr, "FATAL: Gate G1 Correctness Failure for m=4 (max_err=%.4e)\n", max_err);
-            return 1;
-        }
+    }
     }
 
     printf("  [PASSED] All variant path assertions and numerical tolerances validated.\n");
