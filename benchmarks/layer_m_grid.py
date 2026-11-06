@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Time the fused kernel at each m for every distinct stride-1 3x3 layer in the
-E2E models. This is the data behind the tile-selection policy.
+"""Time a kernel at each m for every distinct stride-1 3x3 layer in the E2E models.
+This is the data behind the tile-selection policy.
 
-Writes raw_logs/harness/layer_m_grid.csv.
+Writes raw_logs/harness/layer_m_grid.csv by default.
 """
 import argparse
 import os
@@ -19,6 +19,7 @@ def main():
     p.add_argument("--warmup", type=int, default=2)
     p.add_argument("--threads", default="4,1")
     p.add_argument("--raw", default="raw_logs/harness/layer_m_grid.csv")
+    p.add_argument("--variant", default="fused")
     args = p.parse_args()
 
     shapes = sorted({(l["c_in"], l["c_out"], conv_output_size(l["h_in"], 1, l["padding"]),
@@ -30,8 +31,8 @@ def main():
         for c_in, c_out, h, w in shapes:
             means = []
             for m in (2, 4, 6):
-                lats = measure("fused", m, T, h, w, c_in, c_out, args.runs, args.warmup,
-                               cell_id=f"grid_m{m}_T{T}_c{c_in}x{c_out}_{h}x{w}", raw_path=args.raw)
+                lats = measure(args.variant, m, T, h, w, c_in, c_out, args.runs, args.warmup,
+                               cell_id=f"grid_{args.variant}_m{m}_T{T}_c{c_in}x{c_out}_{h}x{w}", raw_path=args.raw)
                 means.append(sum(lats) / len(lats))
             print(f"T={T} {c_in}x{c_out}@{h}x{w}: " + " ".join(f"m{m}={x:.1f}" for m, x in zip((2, 4, 6), means)), flush=True)
 

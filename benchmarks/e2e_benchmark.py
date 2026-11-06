@@ -16,7 +16,7 @@ METHODOLOGY NOTE:
   with the same output size.
 
 Models: AlexNet, ResNet-18, ResNet-34, VGG16
-Baselines: nonfused_winograd, neon_direct, onnxruntime, tvm, autotvm
+Baselines: v5_batched, nonfused_winograd, neon_direct, onnxruntime, tvm, autotvm
 n=50 minimum per model per platform.
 
 Logs raw per-run latency to raw_logs/harness/e2e_<model>_<platform>.csv and
@@ -397,6 +397,11 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
         baselines["cachewinograd"] = cw_lats
         cw_mean = float(np.mean(cw_lats))
         print(f"       mean={cw_mean:.2f}ms  [layer-time aggregate, NOT a single e2e trace]")
+
+        # Tile-batch fusion with the packed inner loop
+        print(f"     Running v5_batched...")
+        baselines["v5_batched"] = benchmark_harness_e2e(
+            model_name, "v5_batched", n_runs, warmup, conv_layers, threads, platform_name)
 
         # 2. Non-fused Winograd
         print(f"     Running Non-fused Winograd...")

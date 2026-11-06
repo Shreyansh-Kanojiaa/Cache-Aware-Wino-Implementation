@@ -11,6 +11,7 @@
  * 5. v2_regblocked: Additive optimization 1 (Cout register-blocked loop)
  * 6. v3_cin_blocked: Additive optimization 2 (Cin cache-blocking sized to L2 share)
  * 7. v4_pretransformed_packed: Additive optimization 3 (Pre-transformed, packed 64B-aligned weights)
+ * 8. v5_batched: Per-bin packed weights, register-blocked multiply, tile batches over cache blocks
  *
  * Strict Compliance:
  * - Part A.6: Asserts executed_path == requested_variant
@@ -759,6 +760,179 @@ void conv2d_v4_pretransformed_packed(
 }
 
 /* -------------------------------------------------------------------------
+ * 8. v5_batched: Tile-Batch Fusion
+ *
+ * The multiply is one matrix-vector product per Winograd bin:
+ *   M[tile][bin][co] = sum over ci of U[bin][co][ci] * V[tile][bin][ci]
+ * Weights are packed by bin. A block of g_v5_kc input channels for 8 output
+ * channels is applied to every tile in a batch, so it stays in cache instead of
+ * each tile streaming the whole table. --batch 1 gives one-tile-at-a-time fusion
+ * with the same inner loop.
+ * ------------------------------------------------------------------------- */
+typedef float v4f __attribute__((vector_size(16), aligned(4), may_alias));
+
+/* g_v5_batch 0 means auto: batching only pays once the weight table outgrows L2.
+ * ponytail: the 1 MB L2, batch sizes and kc were tuned on one RPi4 at T=4. Pass
+ * --batch and --kc, or read the cache size, for other boards. */
+#define V5_L2_BYTES (1024 * 1024)
+#define V5_BATCH_FITS_L2 4
+#define V5_BATCH_EXCEEDS_L2 16
+static int g_v5_batch = 0;
+static int g_v5_kc = 128;
+
+/* Layout: U_p[bin][co_block][ci][co within block][lane]. Cout is padded up to a
+ * multiple of 8 with zero weights. */
+static float* v5_pack_weights(int m, const float* U, int Cin, int Cout) {
+    int alpha2 = (m + 2) * (m + 2);
+    int nb = alpha2 / 4;
+    int ncb = (Cout + 7) / 8;
+    size_t total = (size_t)nb * ncb * Cin * 32;
+    float* U_p = NULL;
+    if (posix_memalign((void**)&U_p, 64, total * sizeof(float)) != 0) return NULL;
+    memset(U_p, 0, total * sizeof(float));
+    for (int k = 0; k < alpha2; k++) {
+        for (int co = 0; co < Cout; co++) {
+            for (int ci = 0; ci < Cin; ci++) {
+                size_t dst = ((((size_t)(k / 4) * ncb + co / 8) * Cin + ci) * 8 + co % 8) * 4 + k % 4;
+                U_p[dst] = U[((size_t)co * Cin + ci) * alpha2 + k];
+            }
+        }
+    }
+    return U_p;
+}
+
+static inline void v5_mul_block(const float* restrict U, const float* restrict V,
+                                float* restrict M, int nci) {
+    v4f a0 = *(const v4f*)(M), a1 = *(const v4f*)(M + 4);
+    v4f a2 = *(const v4f*)(M + 8), a3 = *(const v4f*)(M + 12);
+    v4f a4 = *(const v4f*)(M + 16), a5 = *(const v4f*)(M + 20);
+    v4f a6 = *(const v4f*)(M + 24), a7 = *(const v4f*)(M + 28);
+    for (int ci = 0; ci < nci; ci++) {
+        v4f v = *(const v4f*)(V + ci * 4);
+        a0 += *(const v4f*)(U) * v;
+        a1 += *(const v4f*)(U + 4) * v;
+        a2 += *(const v4f*)(U + 8) * v;
+        a3 += *(const v4f*)(U + 12) * v;
+        a4 += *(const v4f*)(U + 16) * v;
+        a5 += *(const v4f*)(U + 20) * v;
+        a6 += *(const v4f*)(U + 24) * v;
+        a7 += *(const v4f*)(U + 28) * v;
+        U += 32;
+    }
+    *(v4f*)(M) = a0; *(v4f*)(M + 4) = a1; *(v4f*)(M + 8) = a2; *(v4f*)(M + 12) = a3;
+    *(v4f*)(M + 16) = a4; *(v4f*)(M + 20) = a5; *(v4f*)(M + 24) = a6; *(v4f*)(M + 28) = a7;
+}
+
+void conv2d_v5_batched(
+    int m,
+    const float* input,
+    const float* U_p,
+    float* output,
+    int H, int W,
+    int Cin, int Cout,
+    int T,
+    const char** executed_path)
+{
+    *executed_path = "v5_batched";
+    int alpha = m + 2;
+    int alpha2 = alpha * alpha;
+    int nb = alpha2 / 4;
+    int ncb = (Cout + 7) / 8;
+    int Hout = H - 2;
+    int Wout = W - 2;
+    int Th = (Hout + m - 1) / m;
+    int Tw = (Wout + m - 1) / m;
+    int N_tiles = Th * Tw;
+    size_t table_bytes = (size_t)Cin * Cout * alpha2 * sizeof(float);
+    int batch = g_v5_batch > 0 ? g_v5_batch
+              : (table_bytes > V5_L2_BYTES ? V5_BATCH_EXCEEDS_L2 : V5_BATCH_FITS_L2);
+    if (batch > N_tiles / T) batch = N_tiles / T;
+    if (batch < 1) batch = 1;
+    int n_batches = (N_tiles + batch - 1) / batch;
+
+    #pragma omp parallel num_threads(T)
+    {
+        size_t v_elems = (size_t)batch * nb * Cin * 4;
+        size_t m_elems = (size_t)batch * nb * ncb * 32;
+        float* V = NULL;
+        float* Mb = NULL;
+        if (posix_memalign((void**)&V, 64, v_elems * sizeof(float)) != 0 ||
+            posix_memalign((void**)&Mb, 64, m_elems * sizeof(float)) != 0) {
+            fprintf(stderr, "FATAL: v5_batched allocation failed\n");
+            exit(4);
+        }
+
+        #pragma omp for schedule(dynamic)
+        for (int b = 0; b < n_batches; b++) {
+            int t0 = b * batch;
+            int nt = (t0 + batch <= N_tiles) ? batch : N_tiles - t0;
+
+            /* Input transform for each tile, scattered into bin order */
+            for (int i = 0; i < nt; i++) {
+                int t = t0 + i;
+                int h_start = (t / Tw) * m;
+                int w_start = (t % Tw) * m;
+                for (int ci = 0; ci < Cin; ci++) {
+                    float d[64], v[64];
+                    for (int r = 0; r < alpha; r++) {
+                        for (int c = 0; c < alpha; c++) {
+                            int ih = h_start + r;
+                            int iw = w_start + c;
+                            d[r * alpha + c] = (ih < H && iw < W) ? input[ci * H * W + ih * W + iw] : 0.0f;
+                        }
+                    }
+                    transform_input_tile(m, d, v);
+                    for (int k = 0; k < alpha2; k++) {
+                        V[(((size_t)i * nb + k / 4) * Cin + ci) * 4 + k % 4] = v[k];
+                    }
+                }
+            }
+
+            /* Multiply: each weight block is reused by every tile in the batch */
+            memset(Mb, 0, (size_t)nt * nb * ncb * 32 * sizeof(float));
+            for (int bin = 0; bin < nb; bin++) {
+                for (int cb = 0; cb < ncb; cb++) {
+                    for (int ci0 = 0; ci0 < Cin; ci0 += g_v5_kc) {
+                        int nci = (ci0 + g_v5_kc <= Cin) ? g_v5_kc : Cin - ci0;
+                        const float* U_blk = U_p + (((size_t)bin * ncb + cb) * Cin + ci0) * 32;
+                        for (int i = 0; i < nt; i++) {
+                            size_t tile_bin = (size_t)i * nb + bin;
+                            v5_mul_block(U_blk, V + (tile_bin * Cin + ci0) * 4,
+                                         Mb + (tile_bin * ncb + cb) * 32, nci);
+                        }
+                    }
+                }
+            }
+
+            /* Output transform for each tile */
+            for (int i = 0; i < nt; i++) {
+                int t = t0 + i;
+                int h_start = (t / Tw) * m;
+                int w_start = (t % Tw) * m;
+                for (int co = 0; co < Cout; co++) {
+                    float m_tile[64], y[36];
+                    for (int k = 0; k < alpha2; k++) {
+                        m_tile[k] = Mb[((((size_t)i * nb + k / 4) * ncb + co / 8) * 8 + co % 8) * 4 + k % 4];
+                    }
+                    transform_output_tile(m, m_tile, y);
+                    for (int r = 0; r < m; r++) {
+                        for (int c = 0; c < m; c++) {
+                            int oh = h_start + r;
+                            int ow = w_start + c;
+                            if (oh < Hout && ow < Wout) {
+                                output[co * Hout * Wout + oh * Wout + ow] = y[r * m + c];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        free(V);
+        free(Mb);
+    }
+}
+
+/* -------------------------------------------------------------------------
  * Shared library export for Python ctypes wrapper
  * ------------------------------------------------------------------------- */
 void fused_winograd_conv2d(
@@ -811,7 +985,7 @@ int run_harness_selftest(void) {
     }
 
     /* Test all variants across m in {2, 4, 6} */
-    const char* variants[] = {"neon_direct", "unfused", "fused", "v2_regblocked", "v3_cin_blocked", "v4_pretransformed_packed"};
+    const char* variants[] = {"neon_direct", "unfused", "fused", "v2_regblocked", "v3_cin_blocked", "v4_pretransformed_packed", "v5_batched"};
     int n_var = sizeof(variants) / sizeof(variants[0]);
 
     for (int ti = 0; ti < 2; ti++) {
@@ -839,6 +1013,10 @@ int run_harness_selftest(void) {
                 conv2d_v3_cin_blocked(m, in, U, out, H, W, Cin, Cout, T, &path);
             } else if (strcmp(req, "v4_pretransformed_packed") == 0) {
                 conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &path);
+            } else if (strcmp(req, "v5_batched") == 0) {
+                float* U_p = v5_pack_weights(m, U, Cin, Cout);
+                conv2d_v5_batched(m, in, U_p, out, H, W, Cin, Cout, T, &path);
+                free(U_p);
             }
             free(U);
         }
@@ -860,6 +1038,51 @@ int run_harness_selftest(void) {
         }
     }
     }
+    }
+
+    /* v5_batched edge cases: Cout padding, partial batches, kc smaller than Cin */
+    {
+        int h2 = 14, w2 = 14, ci2 = 5, co2 = 9;
+        int ho2 = h2 - 2, wo2 = w2 - 2;
+        size_t o2 = (size_t)co2 * ho2 * wo2;
+        float* in2 = (float*)malloc((size_t)ci2 * h2 * w2 * sizeof(float));
+        float* w_2 = (float*)malloc((size_t)co2 * ci2 * 9 * sizeof(float));
+        float* ref2 = (float*)malloc(o2 * sizeof(float));
+        float* out2 = (float*)malloc(o2 * sizeof(float));
+        for (int i = 0; i < ci2 * h2 * w2; i++) in2[i] = (float)((i % 17) - 8) / 8.0f;
+        for (int i = 0; i < co2 * ci2 * 9; i++) w_2[i] = (float)((i % 13) - 6) / 6.0f;
+        conv2d_naive_direct(in2, w_2, ref2, h2, w2, ci2, co2, 1, &path);
+        int saved_batch = g_v5_batch, saved_kc = g_v5_kc;
+        int batches[] = {1, 2, 5, 64}, kcs[] = {1, 2, 128};
+        for (int mi = 0; mi < 3; mi++) {
+            int m = test_m_vals[mi];
+            int alpha = m + 2;
+            float* U = (float*)malloc((size_t)co2 * ci2 * alpha * alpha * sizeof(float));
+            transform_weights(m, ci2, co2, w_2, U);
+            float* U_p = v5_pack_weights(m, U, ci2, co2);
+            for (int ti = 0; ti < 2; ti++) for (int bi = 0; bi < 4; bi++) for (int ki = 0; ki < 3; ki++) {
+                g_v5_batch = batches[bi];
+                g_v5_kc = kcs[ki];
+                memset(out2, 0, o2 * sizeof(float));
+                conv2d_v5_batched(m, in2, U_p, out2, h2, w2, ci2, co2, test_T_vals[ti], &path);
+                float max_err = 0.0f;
+                for (size_t i = 0; i < o2; i++) {
+                    float err = fabsf(ref2[i] - out2[i]);
+                    if (err > max_err) max_err = err;
+                }
+                if (max_err > 1e-3f) {
+                    fprintf(stderr, "FATAL: v5_batched m=%d T=%d batch=%d kc=%d (max_err=%.4e)\n",
+                            m, test_T_vals[ti], g_v5_batch, g_v5_kc, max_err);
+                    return 1;
+                }
+            }
+            free(U);
+            free(U_p);
+        }
+        g_v5_batch = saved_batch;
+        g_v5_kc = saved_kc;
+        printf("  v5_batched edge cases OK (padding, partial batches, kc < Cin)\n");
+        free(in2); free(w_2); free(ref2); free(out2);
     }
 
     printf("  [PASSED] All variant path assertions and numerical tolerances validated.\n");
@@ -905,6 +1128,8 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--warmup") == 0 && i + 1 < argc) warmup = atoi(argv[++i]);
         else if (strcmp(argv[i], "--runs") == 0 && i + 1 < argc) runs = atoi(argv[++i]);
         else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) out_csv = argv[++i];
+        else if (strcmp(argv[i], "--batch") == 0 && i + 1 < argc) g_v5_batch = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--kc") == 0 && i + 1 < argc) g_v5_kc = atoi(argv[++i]);
     }
 
     int Hout = H - 2;
@@ -928,6 +1153,11 @@ int main(int argc, char** argv) {
     if (strcmp(variant, "naive_direct") != 0 && strcmp(variant, "neon_direct") != 0) {
         U = (float*)malloc((size_t)Cout * Cin * alpha * alpha * sizeof(float));
         transform_weights(m, Cin, Cout, w, U);
+        if (strcmp(variant, "v5_batched") == 0) {
+            float* U_p = v5_pack_weights(m, U, Cin, Cout);
+            free(U);
+            U = U_p;
+        }
     }
 
     const char* exec_path = NULL;
@@ -948,6 +1178,8 @@ int main(int argc, char** argv) {
             conv2d_v3_cin_blocked(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "v4_pretransformed_packed") == 0) {
             conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
+        } else if (strcmp(variant, "v5_batched") == 0) {
+            conv2d_v5_batched(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         }
         if (strcmp(exec_path, variant) != 0) {
             fprintf(stderr, "FATAL: Gate G2 Executed Path Assertion Failed: requested %s != executed %s\n", variant, exec_path);
@@ -985,6 +1217,8 @@ int main(int argc, char** argv) {
             conv2d_v3_cin_blocked(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "v4_pretransformed_packed") == 0) {
             conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
+        } else if (strcmp(variant, "v5_batched") == 0) {
+            conv2d_v5_batched(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         }
         double t1 = get_time_ms();
         double wall_time_ms = t1 - t0;
