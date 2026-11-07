@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Time single 3x3 conv layers in ONNX Runtime and the C kernels, side by side.
 
-This is the like-for-like comparison: the same layer shape, thread count and
-session, with no other model ops involved.
+This is the like-for-like comparison: the same layer shape and thread count, with
+no other model ops involved. ONNX Runtime gets its own process each time, because
+its worker threads slowed the C kernels timed straight after it.
 
 Writes raw_logs/harness/single_layer_vs_ort.csv and
 summary/harness/single_layer_vs_ort.csv.
 """
 import argparse
 import csv
+import multiprocessing as mp
 import os
 import statistics as st
 import sys
@@ -31,6 +33,7 @@ LAYERS = [
 
 
 def ort_conv(c_in, c_out, size, stride, threads, runs, warmup):
+    np.random.seed(0)
     weights = onh.from_array(np.random.rand(c_out, c_in, 3, 3).astype(np.float32), "w")
     node = oh.make_node("Conv", ["x", "w"], ["y"], kernel_shape=[3, 3], pads=[1, 1, 1, 1],
                         strides=[stride, stride])
@@ -63,14 +66,16 @@ def main():
     p.add_argument("--raw", default="raw_logs/harness/single_layer_vs_ort.csv")
     p.add_argument("--summary", default="summary/harness/single_layer_vs_ort.csv")
     args = p.parse_args()
-    np.random.seed(0)
 
     rows = []
+    ctx = mp.get_context("spawn")
     for T in (int(t) for t in args.threads.split(",")):
         for c_in, c_out, size, stride in LAYERS:
             out = conv_output_size(size, stride)
             cell = f"{c_in}x{c_out}@{size}s{stride}"
-            times = {"onnxruntime": ort_conv(c_in, c_out, size, stride, T, args.runs, args.warmup)}
+            with ctx.Pool(1) as pool:
+                ort_lats = pool.apply(ort_conv, (c_in, c_out, size, stride, T, args.runs, args.warmup))
+            times = {"onnxruntime": ort_lats}
             times["direct_packed"] = measure("direct_packed", 4, T, out, out, c_in, c_out, args.runs,
                                              args.warmup, cell_id=f"slo_dp_T{T}_{cell}",
                                              raw_path=args.raw, stride=stride)
