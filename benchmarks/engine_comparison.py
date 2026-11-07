@@ -33,6 +33,18 @@ XNN_RUNNER = os.path.join(ROOT, "build", "xnnpack_runner")
 C_KEEP = {"c_v5_batched", "c_direct_packed"}
 
 
+def check_power():
+    """Stop if the Pi has under-volted or throttled since boot. These flags stay set until a
+    reboot, and the logged frequency can't show throttling: it stays 1800 at a real 600 MHz."""
+    try:
+        flags = subprocess.run(["vcgencmd", "get_throttled"], stdout=subprocess.PIPE,
+                               universal_newlines=True).stdout.strip()
+    except FileNotFoundError:
+        return  # not a Raspberry Pi
+    if flags != "throttled=0x0":
+        sys.exit(f"Power problem, timings not trustworthy ({flags}). Fix the supply, reboot and rerun.")
+
+
 def build_xnnpack_runner(xnn_dir):
     """Link against every static library the XNNPACK build produced."""
     libs = sorted(glob.glob(os.path.join(xnn_dir, "build", "**", "*.a"), recursive=True))
@@ -202,6 +214,7 @@ def main():
     build()
     subprocess.run(["gcc", "-O3", "-march=native", "-fopenmp", "-o", RUNNER,
                     os.path.join(os.path.dirname(SRC), "model_runner.c"), "-lm"], check=True)
+    check_power()
     build_xnnpack_runner(args.xnnpack_dir)
 
     git_hash = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, stdout=subprocess.PIPE,
@@ -220,6 +233,9 @@ def main():
               "freq_mhz", "temp_c", "throttle_hex"]
     new_raw = not os.path.exists(args.raw) or os.path.getsize(args.raw) == 0
     summary = []
+    if os.path.exists(args.summary):  # a rerun of some models keeps the others
+        with open(args.summary, newline="") as f:
+            summary = [r for r in csv.DictReader(f) if r["model"] not in models]
 
     with open(args.raw, "a", newline="") as raw_file:
         raw = csv.DictWriter(raw_file, fieldnames=fields)
@@ -237,6 +253,7 @@ def main():
                 results = []
 
                 def record(name, lats, out, rows=None):
+                    check_power()
                     err = float(np.max(np.abs(out - reference)) / np.max(np.abs(reference)))
                     for i, lat in enumerate(lats):
                         extra = {k: rows[i][k] for k in ("freq_mhz", "temp_c", "throttle_hex")} if rows else {}
@@ -272,13 +289,13 @@ def main():
                         "p_v5_vs_this": "" if pval is None else f"{pval:.2e}",
                         "output_max_rel_err_vs_ort": f"{err:.2e}", "versions": versions,
                     })
+                with open(args.summary, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(summary[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(summary)
             for path in (weights, bin_path):
                 os.remove(path)
 
-    with open(args.summary, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(summary[0].keys()))
-        writer.writeheader()
-        writer.writerows(summary)
     print(f"Summary: {args.summary}")
 
 
