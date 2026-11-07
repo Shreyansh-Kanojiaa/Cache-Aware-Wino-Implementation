@@ -34,12 +34,14 @@ from src.harness_runner import ROOT, SRC, build
 RUNNER = os.path.join(ROOT, "build", "model_runner")
 PLAN_DIR = os.path.join(ROOT, "build", "models")
 ALL_TILES = 1000000
-# name, variant, batch
+# name, variant, batch, extra model_runner arguments
 ENGINES = [
-    ("c_v5_batched", "v5_batched", None),
-    ("c_strict_fusion", "v5_batched", 1),
-    ("c_nonfused", "v5_batched", ALL_TILES),
-    ("c_direct_packed", "direct_packed", None),
+    ("c_v6_freq", "v6_freq", None, []),
+    ("c_v6_fc16", "v6_freq", None, ["--fc-fp16", "1"]),  # 16-bit fully connected weights, like ncnn's default
+    ("c_v5_batched", "v5_batched", None, []),
+    ("c_strict_fusion", "v5_batched", 1, []),
+    ("c_nonfused", "v5_batched", ALL_TILES, []),
+    ("c_direct_packed", "direct_packed", None, []),
 ]
 CATEGORIES = ["conv3x3_s1_ms", "conv_other_ms", "pad_ms", "relu_ms", "pool_ms", "add_gap_ms", "gemm_ms",
               "conv_depthwise_ms", "clip_silu_ms", "concat_upsample_ms"]
@@ -229,7 +231,7 @@ def run_ort(onnx_path, input_path, shape, threads, runs, warmup):
     return lats, np.concatenate([o.ravel() for o in out])
 
 
-def run_c(plan, weights, input_path, variant, batch, threads, runs, warmup):
+def run_c(plan, weights, input_path, variant, batch, threads, runs, warmup, extra=()):
     with tempfile.TemporaryDirectory() as tmp:
         csv_path = os.path.join(tmp, "runs.csv")
         out_path = os.path.join(tmp, "out.bin")
@@ -238,6 +240,7 @@ def run_c(plan, weights, input_path, variant, batch, threads, runs, warmup):
                "--runs", str(runs)]
         if batch:
             cmd += ["--batch", str(batch)]
+        cmd += list(extra)
         subprocess.run(cmd, check=True)
         with open(csv_path) as f:
             rows = list(csv.DictReader(f))
@@ -283,8 +286,8 @@ def main():
                                   "engine": "onnxruntime", "threads": T, "run_id": i, "total_ms": lat})
                 results = [("onnxruntime", ort_lats, 0.0, {})]
                 print(f"{model} T={T} onnxruntime median={st.median(ort_lats):.1f}ms", flush=True)
-                for name, variant, batch in ENGINES:
-                    rows, out = run_c(plan, weights, input_path, variant, batch, T, args.runs, args.warmup)
+                for name, variant, batch, extra in ENGINES:
+                    rows, out = run_c(plan, weights, input_path, variant, batch, T, args.runs, args.warmup, extra)
                     if out.size != ort_out.size:
                         raise RuntimeError(f"{model} {name}: output size {out.size} != {ort_out.size}")
                     err = float(np.max(np.abs(out - ort_out)) / np.max(np.abs(ort_out)))

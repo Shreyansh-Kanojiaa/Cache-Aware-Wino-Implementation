@@ -38,6 +38,7 @@ static Op g_ops[MAX_OPS];
 static int g_nops;
 static double g_cat[N_CATS];
 static int g_v6;
+static int g_fc_fp16;  /* store fully connected weights as 16-bit floats, as ncnn does by default on Arm */
 #define MAX_OUTPUTS 8
 static int g_outs[MAX_OUTPUTS];
 static int g_n_outs;
@@ -88,6 +89,76 @@ static void clip_tensor(const float* x, float* y, size_t n, float lo, float hi, 
         for (; i < end; i++) y[i] = x[i] < lo ? lo : (x[i] > hi ? hi : x[i]);
     }
 }
+
+/* Fully connected: rows are regrouped at load so 8 outputs share one weight stream
+ * W_g[group][in][8], and each step reuses one input value across 8 outputs. */
+static void fc_pack_rows(float* W, int nin, int nout) {
+    float* tmp = (float*)malloc((size_t)8 * nin * sizeof(float));
+    if (!tmp) die("fc pack allocation failed");
+    for (int g = 0; g < nout / 8; g++) {
+        float* blk = W + (size_t)g * 8 * nin;  /* the group's 8 rows are already contiguous */
+        memcpy(tmp, blk, (size_t)8 * nin * sizeof(float));
+        for (int r = 0; r < 8; r++) {
+            for (int k = 0; k < nin; k++) blk[(size_t)k * 8 + r] = tmp[(size_t)r * nin + k];
+        }
+    }
+    free(tmp);
+}
+
+static inline void fc_group8(const float* restrict Wg, const float* restrict x, int nin, float* restrict y) {
+    v4f z = {0.0f, 0.0f, 0.0f, 0.0f};
+    v4f a0 = z, a1 = z, a2 = z, a3 = z, a4 = z, a5 = z, a6 = z, a7 = z;
+    int k = 0;
+    for (; k + 4 <= nin; k += 4) {
+        v4f xv = *(const v4f*)(x + k);
+        a0 += *(const v4f*)(Wg) * xv[0];
+        a1 += *(const v4f*)(Wg + 4) * xv[0];
+        a2 += *(const v4f*)(Wg + 8) * xv[1];
+        a3 += *(const v4f*)(Wg + 12) * xv[1];
+        a4 += *(const v4f*)(Wg + 16) * xv[2];
+        a5 += *(const v4f*)(Wg + 20) * xv[2];
+        a6 += *(const v4f*)(Wg + 24) * xv[3];
+        a7 += *(const v4f*)(Wg + 28) * xv[3];
+        Wg += 32;
+    }
+    for (; k < nin; k++) {
+        a0 += *(const v4f*)(Wg) * x[k];
+        a1 += *(const v4f*)(Wg + 4) * x[k];
+        Wg += 8;
+    }
+    *(v4f*)(y) = (a0 + a2) + (a4 + a6);
+    *(v4f*)(y + 4) = (a1 + a3) + (a5 + a7);
+}
+
+#if HAS_ARM_NEON
+/* Same as fc_group8 with 16-bit weights, widened to 32-bit before multiplying */
+static inline void fc_group8_fp16(const __fp16* restrict Wg, const float* restrict x, int nin, float* restrict y) {
+    float32x4_t z = vdupq_n_f32(0.0f);
+    float32x4_t a0 = z, a1 = z, a2 = z, a3 = z, a4 = z, a5 = z, a6 = z, a7 = z;
+    int k = 0;
+    for (; k + 4 <= nin; k += 4) {
+        float32x4_t xv = vld1q_f32(x + k);
+        float16x8_t h0 = vld1q_f16(Wg), h1 = vld1q_f16(Wg + 8), h2 = vld1q_f16(Wg + 16), h3 = vld1q_f16(Wg + 24);
+        a0 = vfmaq_laneq_f32(a0, vcvt_f32_f16(vget_low_f16(h0)), xv, 0);
+        a1 = vfmaq_laneq_f32(a1, vcvt_high_f32_f16(h0), xv, 0);
+        a2 = vfmaq_laneq_f32(a2, vcvt_f32_f16(vget_low_f16(h1)), xv, 1);
+        a3 = vfmaq_laneq_f32(a3, vcvt_high_f32_f16(h1), xv, 1);
+        a4 = vfmaq_laneq_f32(a4, vcvt_f32_f16(vget_low_f16(h2)), xv, 2);
+        a5 = vfmaq_laneq_f32(a5, vcvt_high_f32_f16(h2), xv, 2);
+        a6 = vfmaq_laneq_f32(a6, vcvt_f32_f16(vget_low_f16(h3)), xv, 3);
+        a7 = vfmaq_laneq_f32(a7, vcvt_high_f32_f16(h3), xv, 3);
+        Wg += 32;
+    }
+    for (; k < nin; k++) {
+        float16x8_t h = vld1q_f16(Wg);
+        a0 = vfmaq_n_f32(a0, vcvt_f32_f16(vget_low_f16(h)), x[k]);
+        a1 = vfmaq_n_f32(a1, vcvt_high_f32_f16(h), x[k]);
+        Wg += 8;
+    }
+    vst1q_f32(y, vaddq_f32(vaddq_f32(a0, a2), vaddq_f32(a4, a6)));
+    vst1q_f32(y + 4, vaddq_f32(vaddq_f32(a1, a3), vaddq_f32(a5, a7)));
+}
+#endif
 
 static void run_conv(Op* o, int T) {
     Tensor* in = &g_t[o->in];
@@ -216,8 +287,19 @@ static void run_op(Op* o, int T) {
     } else if (o->type == OP_GEMM) {
         cat = CAT_GEMM;
         const float* x = in->d;
+        int groups = o->nout / 8;
         #pragma omp parallel for num_threads(T) schedule(static)
-        for (int row = 0; row < o->nout; row++) {
+        for (int g = 0; g < groups; g++) {
+            float* y = out->d + g * 8;
+#if HAS_ARM_NEON
+            if (g_fc_fp16) fc_group8_fp16((const __fp16*)o->w + (size_t)g * 8 * o->nin, x, o->nin, y);
+            else
+#endif
+            fc_group8(o->w + (size_t)g * 8 * o->nin, x, o->nin, y);
+            for (int r = 0; r < 8; r++) y[r] += o->bias ? o->bias[g * 8 + r] : 0.0f;
+        }
+        /* rows past the last full group stay row-major */
+        for (int row = groups * 8; row < o->nout; row++) {
             const float* w = o->w + (size_t)row * o->nin;
             v4f acc = {0.0f, 0.0f, 0.0f, 0.0f};
             int j = 0;
@@ -329,6 +411,17 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
             if (fscanf(f, "%d %d %d %d %ld %ld", &o->out, &o->in, &o->nin, &o->nout, &o->woff, &o->boff) != 6) die("bad GEMM");
             o->w = weights + o->woff;
             o->bias = o->boff >= 0 ? weights + o->boff : NULL;
+            fc_pack_rows((float*)o->w, o->nin, o->nout);
+            if (g_fc_fp16) {
+#if HAS_ARM_NEON
+                /* Narrow the grouped rows in place: each half lands before the float it came from */
+                size_t n = (size_t)(o->nout / 8) * 8 * o->nin;
+                __fp16* h = (__fp16*)o->w;
+                for (size_t i = 0; i < n; i++) h[i] = (__fp16)o->w[i];
+#else
+                die("--fc-fp16 needs NEON");
+#endif
+            }
         } else {
             die("unknown plan op");
         }
@@ -366,6 +459,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--runs") == 0) runs = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--batch") == 0) g_v5_batch = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--kc") == 0) g_v5_kc = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--fc-fp16") == 0) g_fc_fp16 = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");

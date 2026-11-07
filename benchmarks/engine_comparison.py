@@ -29,7 +29,8 @@ from benchmarks.whole_model import ENGINES as C_ENGINES, PLAN_DIR, RUNNER, expor
 from src.harness_runner import ROOT, SRC, build
 
 XNN_RUNNER = os.path.join(ROOT, "build", "xnnpack_runner")
-C_KEEP = {"c_v5_batched", "c_direct_packed"}
+C_KEEP = {"c_v6_freq", "c_v6_fc16", "c_direct_packed"}
+OURS = "c_v6_freq"
 
 
 def check_power():
@@ -190,7 +191,7 @@ def write_ncnn_model(plan, weights, param_path, bin_path):
     return input_blob, [blob(t) for t in output_ids]
 
 
-def run_ncnn(param_path, bin_path, input_blob, output_blobs, input_path, shape, threads, runs, warmup, winograd):
+def run_ncnn(param_path, bin_path, input_blob, output_blobs, input_path, shape, threads, runs, warmup, winograd, fp16_storage=True):
     import ncnn
 
     ncnn.set_cpu_powersave(0)
@@ -202,6 +203,7 @@ def run_ncnn(param_path, bin_path, input_blob, output_blobs, input_path, shape, 
     net.opt.num_threads = threads
     net.opt.lightmode = True
     net.opt.use_winograd_convolution = winograd
+    net.opt.use_fp16_storage = fp16_storage  # on by default: 16-bit fully connected weights on Arm
     net.opt.blob_allocator = blob_pool
     net.opt.workspace_allocator = workspace_pool
     if net.load_param(param_path) != 0 or net.load_model(bin_path) != 0:
@@ -296,26 +298,26 @@ def main():
 
                 ort_lats, reference = in_own_process(run_ort, onnx_path, input_path, shape, T, args.runs, args.warmup)
                 record("onnxruntime", ort_lats, reference)
-                for name, variant, batch in C_ENGINES:
+                for name, variant, batch, extra in C_ENGINES:
                     if name in C_KEEP:
-                        rows, out = run_c(plan, weights, input_path, variant, batch, T, args.runs, args.warmup)
+                        rows, out = run_c(plan, weights, input_path, variant, batch, T, args.runs, args.warmup, extra)
                         record(name, [float(r["total_ms"]) for r in rows], out, rows)
                 rows, out = run_xnnpack(plan, weights, input_path, T, args.runs, args.warmup)
                 record("xnnpack", [float(r["total_ms"]) for r in rows], out, rows)
-                for name, winograd in (("ncnn", True), ("ncnn_no_winograd", False)):
+                for name, winograd, fp16 in (("ncnn", True, True), ("ncnn_no_winograd", False, True), ("ncnn_fp32", True, False)):
                     lats, out = in_own_process(run_ncnn, param_path, bin_path, in_blob, out_blob, input_path, shape, T,
-                                               args.runs, args.warmup, winograd)
+                                               args.runs, args.warmup, winograd, fp16)
                     record(name, lats, out)
                 raw_file.flush()
 
-                ours = next(r[1] for r in results if r[0] == "c_v5_batched")
+                ours = next(r[1] for r in results if r[0] == OURS)
                 for name, lats, err in results:
-                    pval = stats.ttest_ind(ours, lats, equal_var=False)[1] if name != "c_v5_batched" else None
+                    pval = stats.ttest_ind(ours, lats, equal_var=False)[1] if name != OURS else None
                     summary.append({
                         "model": model, "engine": name, "threads": T, "n": len(lats),
                         "median_ms": round(st.median(lats), 3), "mean_ms": round(st.mean(lats), 3),
                         "std_ms": round(st.stdev(lats), 3),
-                        "v5_less_time_pct": round((st.median(lats) - st.median(ours)) / st.median(lats) * 100.0, 2),
+                        "ours_less_time_pct": round((st.median(lats) - st.median(ours)) / st.median(lats) * 100.0, 2),
                         "p_v5_vs_this": "" if pval is None else f"{pval:.2e}",
                         "output_max_rel_err_vs_ort": f"{err:.2e}", "versions": versions,
                     })
