@@ -318,7 +318,7 @@ def main():
                         "median_ms": round(st.median(lats), 3), "mean_ms": round(st.mean(lats), 3),
                         "std_ms": round(st.stdev(lats), 3),
                         "ours_less_time_pct": round((st.median(lats) - st.median(ours)) / st.median(lats) * 100.0, 2),
-                        "p_v5_vs_this": "" if pval is None else f"{pval:.2e}",
+                        "p_ours_vs_this": "" if pval is None else f"{pval:.2e}",
                         "output_max_rel_err_vs_ort": f"{err:.2e}", "versions": versions,
                     })
                 with open(args.summary, "w", newline="") as f:
