@@ -72,6 +72,22 @@ static inline void silu_plane(const float* x, float* y, size_t n) {
     for (; i < n; i++) y[i] = x[i] / (1.0f + expf(-x[i]));
 }
 
+/* ReLU and ReLU6. In-place is fine. Threads split fixed blocks, so flat tensors work too. */
+static void clip_tensor(const float* x, float* y, size_t n, float lo, float hi, int T) {
+    enum { BLOCK = 4096 };
+    long blocks = (long)((n + BLOCK - 1) / BLOCK);
+    #pragma omp parallel for num_threads(T) schedule(static)
+    for (long b = 0; b < blocks; b++) {
+        size_t i = (size_t)b * BLOCK;
+        size_t end = i + BLOCK < n ? i + BLOCK : n;
+#if HAS_ARM_NEON
+        float32x4_t vlo = vdupq_n_f32(lo), vhi = vdupq_n_f32(hi);
+        for (; i + 4 <= end; i += 4) vst1q_f32(y + i, vminq_f32(vmaxq_f32(vld1q_f32(x + i), vlo), vhi));
+#endif
+        for (; i < end; i++) y[i] = x[i] < lo ? lo : (x[i] > hi ? hi : x[i]);
+    }
+}
+
 static void run_conv(Op* o, int T) {
     Tensor* in = &g_t[o->in];
     Tensor* out = &g_t[o->out];
@@ -128,17 +144,10 @@ static void run_op(Op* o, int T) {
 
     if (o->type == OP_RELU) {
         cat = CAT_RELU;
-        const float* a = in->d;
-        float* y = out->d;
-        #pragma omp parallel for num_threads(T) schedule(static)
-        for (size_t i = 0; i < n; i++) y[i] = a[i] > 0.0f ? a[i] : 0.0f;
+        clip_tensor(in->d, out->d, n, 0.0f, INFINITY, T);
     } else if (o->type == OP_CLIP) {
         cat = CAT_ACT;
-        const float* a = in->d;
-        float* y = out->d;
-        float lo = o->lo, hi = o->hi;
-        #pragma omp parallel for num_threads(T) schedule(static)
-        for (size_t i = 0; i < n; i++) y[i] = a[i] < lo ? lo : (a[i] > hi ? hi : a[i]);
+        clip_tensor(in->d, out->d, n, o->lo, o->hi, T);
     } else if (o->type == OP_SILU) {
         cat = CAT_ACT;
         size_t plane = (size_t)in->h * in->w;
