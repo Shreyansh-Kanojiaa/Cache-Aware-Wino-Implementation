@@ -12,11 +12,12 @@ METHODOLOGY NOTE:
   TVM ARE full-model single-process runs, so those comparisons are not like for
   like.
 
-  Stride-2 layers can't use Winograd, so all kernels run them as neon_direct
-  with the same output size.
+  Stride-2 layers can't use Winograd, so the Winograd kernels all run them with
+  direct_packed. neon_direct has no stride support, so its row times them as
+  stride-1 layers with the same output size.
 
 Models: AlexNet, ResNet-18, ResNet-34, VGG16
-Baselines: v5_batched, nonfused_winograd, neon_direct, onnxruntime, tvm, autotvm
+Baselines: v5_batched, nonfused_winograd, direct_packed, neon_direct, onnxruntime, tvm, autotvm
 n=50 minimum per model per platform.
 
 Logs raw per-run latency to raw_logs/harness/e2e_<model>_<platform>.csv and
@@ -215,16 +216,14 @@ def benchmark_harness_e2e(model_name, variant, n_runs, warmup, conv_layers, thre
     for i, layer in enumerate(conv_layers):
         stride = layer.get("stride", 1)
         padding = layer.get("padding", 1)
-        # ponytail: stride-2 is timed as a stride-1 direct conv with the same output
-        # size, which matches its work but not its memory stride. Add stride to the
-        # harness if these layers ever matter.
-        use = "neon_direct" if stride > 1 else variant
+        use = "direct_packed" if stride > 1 and variant != "neon_direct" else variant
         td = tiler.select_best_tile(layer["c_in"], layer["c_out"])["selected_tile"]["tile"]
         totals += measure(use, td - 2, threads,
                           conv_output_size(layer["h_in"], stride, padding),
                           conv_output_size(layer["w_in"], stride, padding),
                           layer["c_in"], layer["c_out"], n_runs, warmup, board=platform_name,
-                          cell_id=f"{model_name}_L{i}_{variant}_T{threads}", raw_path=raw_path)
+                          cell_id=f"{model_name}_L{i}_{variant}_T{threads}", raw_path=raw_path,
+                          stride=stride if use == "direct_packed" else 1)
     return totals.tolist()
 
 
@@ -409,6 +408,10 @@ def run_e2e(model_list=None, n_runs=50, warmup=10, platform_name=None, tvm_targe
             model_name, "unfused", n_runs, warmup, conv_layers, threads, platform_name)
 
         # 3. Direct convolution
+        print(f"     Running packed direct conv...")
+        baselines["direct_packed"] = benchmark_harness_e2e(
+            model_name, "direct_packed", n_runs, warmup, conv_layers, threads, platform_name)
+
         print(f"     Running direct conv...")
         baselines["neon_direct"] = benchmark_harness_e2e(
             model_name, "neon_direct", n_runs, warmup, conv_layers, threads, platform_name)

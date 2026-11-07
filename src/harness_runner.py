@@ -36,16 +36,17 @@ def conv_output_size(size, stride=1, padding=1):
 
 
 def measure(variant, m, threads, h_out, w_out, c_in, c_out, runs, warmup,
-            board="rpi4", cell_id="cell", raw_path=None):
+            board="rpi4", cell_id="cell", raw_path=None, stride=1):
     """Run one cell and return its latencies (ms). h_out/w_out are output sizes;
-    the harness does a valid conv, so its input is 2 larger on each axis."""
+    the harness does a valid conv, so its input is sized to produce exactly those."""
     build()
     git_hash = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
                               stdout=subprocess.PIPE, universal_newlines=True).stdout.strip()
     with tempfile.NamedTemporaryFile("r", suffix=".csv") as tmp:
         subprocess.run([BIN, "--board", board, "--git-hash", git_hash or "unknown",
                         "--cell-id", cell_id, "--variant", variant, "--m", str(m),
-                        "--T", str(threads), "--H", str(h_out + 2), "--W", str(w_out + 2),
+                        "--T", str(threads), "--stride", str(stride),
+                        "--H", str((h_out - 1) * stride + 3), "--W", str((w_out - 1) * stride + 3),
                         "--Cin", str(c_in), "--Cout", str(c_out), "--warmup", str(warmup),
                         "--runs", str(runs), "--out", tmp.name], check=True)
         rows = list(csv.DictReader(tmp, fieldnames=FIELDS))

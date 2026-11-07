@@ -12,6 +12,7 @@
  * 6. v3_cin_blocked: Additive optimization 2 (Cin cache-blocking sized to L2 share)
  * 7. v4_pretransformed_packed: Additive optimization 3 (Pre-transformed, packed 64B-aligned weights)
  * 8. v5_batched: Per-bin packed weights, register-blocked multiply, tile batches over cache blocks
+ * 9. direct_packed: Packed direct convolution with real stride
  *
  * Strict Compliance:
  * - Part A.6: Asserts executed_path == requested_variant
@@ -978,6 +979,167 @@ void conv2d_v5_batched(
 }
 
 /* -------------------------------------------------------------------------
+ * 9. direct_packed: Packed Direct Convolution With Real Stride
+ *
+ * Treats the conv as a matrix product: outputs = patches x weights, where a patch
+ * is every input channel's 3x3 window for one output pixel. Each inner step
+ * multiplies 4 pixels by 8 output channels with accumulators held in registers,
+ * and each block of weights is reused by every pixel in a block.
+ * ------------------------------------------------------------------------- */
+/* ponytail: tuned on one RPi4 at T=4; pass --dp-kci and --dp-block for other boards. */
+static int g_dp_kci = 32;      /* input channels per cache block */
+static int g_dp_block = 16;    /* output pixels per thread-owned block */
+static int g_stride = 1;
+
+/* Layout: W_p[co_block][ci][tap][co within block]. Cout is padded up to a multiple
+ * of 8 with zero weights. */
+static float* dp_pack_weights(const float* weights, int Cin, int Cout) {
+    int ncb = (Cout + 7) / 8;
+    size_t total = (size_t)ncb * Cin * 9 * 8;
+    float* W_p = v5_alloc(total);
+    memset(W_p, 0, total * sizeof(float));
+    for (int co = 0; co < Cout; co++) {
+        for (int ci = 0; ci < Cin; ci++) {
+            for (int tap = 0; tap < 9; tap++) {
+                W_p[(((size_t)(co / 8) * Cin + ci) * 9 + tap) * 8 + co % 8] =
+                    weights[((size_t)co * Cin + ci) * 9 + tap];
+            }
+        }
+    }
+    return W_p;
+}
+
+static inline void dp_kernel(const float* restrict W, const float* restrict P,
+                             float* restrict O, int ntaps) {
+    v4f a0 = *(const v4f*)(O), a1 = *(const v4f*)(O + 4);
+    v4f a2 = *(const v4f*)(O + 8), a3 = *(const v4f*)(O + 12);
+    v4f a4 = *(const v4f*)(O + 16), a5 = *(const v4f*)(O + 20);
+    v4f a6 = *(const v4f*)(O + 24), a7 = *(const v4f*)(O + 28);
+    for (int k = 0; k < ntaps; k++) {
+        v4f p = *(const v4f*)P;
+        v4f w0 = *(const v4f*)W;
+        v4f w1 = *(const v4f*)(W + 4);
+        a0 += w0 * p[0];
+        a1 += w1 * p[0];
+        a2 += w0 * p[1];
+        a3 += w1 * p[1];
+        a4 += w0 * p[2];
+        a5 += w1 * p[2];
+        a6 += w0 * p[3];
+        a7 += w1 * p[3];
+        P += 4;
+        W += 8;
+    }
+    *(v4f*)(O) = a0; *(v4f*)(O + 4) = a1; *(v4f*)(O + 8) = a2; *(v4f*)(O + 12) = a3;
+    *(v4f*)(O + 16) = a4; *(v4f*)(O + 20) = a5; *(v4f*)(O + 24) = a6; *(v4f*)(O + 28) = a7;
+}
+
+/* Pack input channels [ci0, ci0 + nci) for pixels pix0.. into P[group][ci][tap][lane].
+ * Lanes past the last pixel stay zero. */
+static inline void dp_pack_patches(const float* input, float* P, int pix0, int np,
+                                   int ci0, int nci, int H, int W, int Wout, int s) {
+    int ng = (np + 3) / 4;
+    memset(P, 0, (size_t)ng * nci * 9 * 4 * sizeof(float));
+    for (int j = 0; j < np; j++) {
+        int pix = pix0 + j;
+        int oh = pix / Wout, ow = pix % Wout;
+        float* g_p = P + (size_t)(j / 4) * nci * 9 * 4 + j % 4;
+        for (int ci = 0; ci < nci; ci++) {
+            const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oh * s) * W + ow * s;
+            for (int kh = 0; kh < 3; kh++) {
+                for (int kw = 0; kw < 3; kw++) {
+                    g_p[(size_t)(ci * 9 + kh * 3 + kw) * 4] = in[kh * W + kw];
+                }
+            }
+        }
+    }
+}
+
+static inline void dp_write_pixels(const float* O, float* output, int pix0, int np,
+                                   int ncb, int Cout, int Hout, int Wout) {
+    for (int j = 0; j < np; j++) {
+        const float* o = O + (size_t)(j / 4) * ncb * 32 + (j % 4) * 8;
+        for (int co = 0; co < Cout; co++) {
+            output[(size_t)co * Hout * Wout + pix0 + j] = o[(co / 8) * 32 + co % 8];
+        }
+    }
+}
+
+void conv2d_direct_packed(
+    const float* input,
+    const float* W_p,
+    float* output,
+    int H, int W,
+    int Cin, int Cout,
+    int s,
+    int T,
+    const char** executed_path)
+{
+    *executed_path = "direct_packed";
+    int Hout = (H - 3) / s + 1;
+    int Wout = (W - 3) / s + 1;
+    int N_pix = Hout * Wout;
+    int ncb = (Cout + 7) / 8;
+    int block = g_dp_block;
+
+    if (N_pix / T < block) {
+        /* Too few pixels for each thread to own a block, so threads share one and
+         * split the output channels instead. */
+        int ng = (N_pix + 3) / 4;
+        float* P = v5_alloc((size_t)ng * Cin * 9 * 4);
+        float* O = v5_alloc((size_t)ng * ncb * 32);
+        dp_pack_patches(input, P, 0, N_pix, 0, Cin, H, W, Wout, s);
+        memset(O, 0, (size_t)ng * ncb * 32 * sizeof(float));
+        #pragma omp parallel for num_threads(T) schedule(dynamic)
+        for (int cb = 0; cb < ncb; cb++) {
+            for (int ci0 = 0; ci0 < Cin; ci0 += g_dp_kci) {
+                int nci = (ci0 + g_dp_kci <= Cin) ? g_dp_kci : Cin - ci0;
+                const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * 9) * 8;
+                for (int g = 0; g < ng; g++) {
+                    dp_kernel(W_blk, P + ((size_t)g * Cin + ci0) * 9 * 4,
+                              O + ((size_t)g * ncb + cb) * 32, nci * 9);
+                }
+            }
+        }
+        dp_write_pixels(O, output, 0, N_pix, ncb, Cout, Hout, Wout);
+        free(P);
+        free(O);
+        return;
+    }
+
+    int n_blocks = (N_pix + block - 1) / block;
+    #pragma omp parallel num_threads(T)
+    {
+        int ng_max = (block + 3) / 4;
+        int kci_max = g_dp_kci < Cin ? g_dp_kci : Cin;
+        float* P = v5_alloc((size_t)ng_max * kci_max * 9 * 4);
+        float* O = v5_alloc((size_t)ng_max * ncb * 32);
+
+        #pragma omp for schedule(dynamic)
+        for (int b = 0; b < n_blocks; b++) {
+            int pix0 = b * block;
+            int np = (pix0 + block <= N_pix) ? block : N_pix - pix0;
+            int ng = (np + 3) / 4;
+            memset(O, 0, (size_t)ng * ncb * 32 * sizeof(float));
+            for (int ci0 = 0; ci0 < Cin; ci0 += g_dp_kci) {
+                int nci = (ci0 + g_dp_kci <= Cin) ? g_dp_kci : Cin - ci0;
+                dp_pack_patches(input, P, pix0, np, ci0, nci, H, W, Wout, s);
+                for (int cb = 0; cb < ncb; cb++) {
+                    const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * 9) * 8;
+                    for (int g = 0; g < ng; g++) {
+                        dp_kernel(W_blk, P + (size_t)g * nci * 9 * 4,
+                                  O + ((size_t)g * ncb + cb) * 32, nci * 9);
+                    }
+                }
+            }
+            dp_write_pixels(O, output, pix0, np, ncb, Cout, Hout, Wout);
+        }
+        free(P);
+        free(O);
+    }
+}
+
+/* -------------------------------------------------------------------------
  * Shared library export for Python ctypes wrapper
  * ------------------------------------------------------------------------- */
 void fused_winograd_conv2d(
@@ -1130,6 +1292,57 @@ int run_harness_selftest(void) {
         free(in2); free(w_2); free(ref2); free(out2);
     }
 
+    /* direct_packed: stride, Cout padding, partial blocks and both threading modes */
+    {
+        int h3 = 15, w3 = 15, ci3 = 37, co3 = 9;
+        int ss[] = {1, 2};
+        size_t i3 = (size_t)ci3 * h3 * w3, w_n = (size_t)co3 * ci3 * 9;
+        float* in3 = (float*)malloc(i3 * sizeof(float));
+        float* w_3 = (float*)malloc(w_n * sizeof(float));
+        for (size_t i = 0; i < i3; i++) in3[i] = (float)((long long)(i % 17) - 8) / 8.0f;
+        for (size_t i = 0; i < w_n; i++) w_3[i] = (float)((long long)(i % 13) - 6) / 6.0f;
+        float* W_p = dp_pack_weights(w_3, ci3, co3);
+        int saved_kci = g_dp_kci, saved_block = g_dp_block;
+        int kcis[] = {1, 32, 64}, blocks[] = {1, 6, 32};
+        for (int si = 0; si < 2; si++) {
+            int s3 = ss[si];
+            int ho3 = (h3 - 3) / s3 + 1, wo3 = (w3 - 3) / s3 + 1;
+            size_t o3 = (size_t)co3 * ho3 * wo3;
+            float* ref3 = (float*)calloc(o3, sizeof(float));
+            float* out3 = (float*)malloc(o3 * sizeof(float));
+            for (int co = 0; co < co3; co++) for (int ho = 0; ho < ho3; ho++) for (int wo = 0; wo < wo3; wo++) {
+                float sum = 0.0f;
+                for (int ci = 0; ci < ci3; ci++) for (int kh = 0; kh < 3; kh++) for (int kw = 0; kw < 3; kw++) {
+                    sum += in3[(size_t)ci * h3 * w3 + (ho * s3 + kh) * w3 + wo * s3 + kw] *
+                           w_3[((size_t)co * ci3 + ci) * 9 + kh * 3 + kw];
+                }
+                ref3[(size_t)co * ho3 * wo3 + ho * wo3 + wo] = sum;
+            }
+            for (int ti = 0; ti < 2; ti++) for (int ki = 0; ki < 3; ki++) for (int bi = 0; bi < 3; bi++) {
+                g_dp_kci = kcis[ki];
+                g_dp_block = blocks[bi];
+                memset(out3, 0, o3 * sizeof(float));
+                conv2d_direct_packed(in3, W_p, out3, h3, w3, ci3, co3, s3, test_T_vals[ti], &path);
+                float max_err = 0.0f;
+                for (size_t i = 0; i < o3; i++) {
+                    float err = fabsf(ref3[i] - out3[i]);
+                    if (err > max_err) max_err = err;
+                }
+                if (max_err > 1e-3f) {
+                    fprintf(stderr, "FATAL: direct_packed s=%d T=%d kci=%d block=%d (max_err=%.4e)\n",
+                            s3, test_T_vals[ti], g_dp_kci, g_dp_block, max_err);
+                    return 1;
+                }
+            }
+            free(ref3);
+            free(out3);
+        }
+        g_dp_kci = saved_kci;
+        g_dp_block = saved_block;
+        printf("  direct_packed OK (stride 1 and 2, padding, partial blocks, both threading modes)\n");
+        free(in3); free(w_3); free(W_p);
+    }
+
     printf("  [PASSED] All variant path assertions and numerical tolerances validated.\n");
 
     free(in);
@@ -1175,10 +1388,17 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) out_csv = argv[++i];
         else if (strcmp(argv[i], "--batch") == 0 && i + 1 < argc) g_v5_batch = atoi(argv[++i]);
         else if (strcmp(argv[i], "--kc") == 0 && i + 1 < argc) g_v5_kc = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--dp-kci") == 0 && i + 1 < argc) g_dp_kci = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--dp-block") == 0 && i + 1 < argc) g_dp_block = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--stride") == 0 && i + 1 < argc) g_stride = atoi(argv[++i]);
     }
 
-    int Hout = H - 2;
-    int Wout = W - 2;
+    if (g_stride != 1 && strcmp(variant, "direct_packed") != 0) {
+        fprintf(stderr, "FATAL: only direct_packed supports --stride (got %s)\n", variant);
+        return 5;
+    }
+    int Hout = (H - 3) / g_stride + 1;
+    int Wout = (W - 3) / g_stride + 1;
     double total_flops = 2.0 * (double)Hout * (double)Wout * (double)Cin * (double)Cout * 9.0;
 
     size_t in_sz = (size_t)Cin * H * W;
@@ -1195,7 +1415,8 @@ int main(int argc, char** argv) {
 
     int alpha = m + 2;
     float* U = NULL;
-    if (strcmp(variant, "naive_direct") != 0 && strcmp(variant, "neon_direct") != 0) {
+    float* W_p = strcmp(variant, "direct_packed") == 0 ? dp_pack_weights(w, Cin, Cout) : NULL;
+    if (strcmp(variant, "naive_direct") != 0 && strcmp(variant, "neon_direct") != 0 && !W_p) {
         U = (float*)malloc((size_t)Cout * Cin * alpha * alpha * sizeof(float));
         transform_weights(m, Cin, Cout, w, U);
         if (strcmp(variant, "v5_batched") == 0) {
@@ -1225,6 +1446,8 @@ int main(int argc, char** argv) {
             conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "v5_batched") == 0) {
             conv2d_v5_batched(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
+        } else if (strcmp(variant, "direct_packed") == 0) {
+            conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, g_stride, T, &exec_path);
         }
         if (strcmp(exec_path, variant) != 0) {
             fprintf(stderr, "FATAL: Gate G2 Executed Path Assertion Failed: requested %s != executed %s\n", variant, exec_path);
@@ -1264,6 +1487,8 @@ int main(int argc, char** argv) {
             conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "v5_batched") == 0) {
             conv2d_v5_batched(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
+        } else if (strcmp(variant, "direct_packed") == 0) {
+            conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, g_stride, T, &exec_path);
         }
         double t1 = get_time_ms();
         double wall_time_ms = t1 - t0;
@@ -1282,6 +1507,7 @@ int main(int argc, char** argv) {
     }
 
     if (U) free(U);
+    free(W_p);
     free(in);
     free(w);
     free(out);
