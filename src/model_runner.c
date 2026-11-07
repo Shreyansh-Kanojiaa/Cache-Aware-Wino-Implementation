@@ -2,23 +2,27 @@
  * src/model_runner.c
  *
  * Runs a whole model in C from a plan made by benchmarks/whole_model.py, using the
- * same graph and weights as the ONNX file. 3x3 stride-1 convs use --variant; every
- * other conv uses direct_packed.
+ * same graph and weights as the ONNX file. 3x3 stride-1 convs use --variant, depthwise
+ * convs use conv2d_depthwise, and every other conv uses direct_packed.
  */
 #define main harness_main
 #include "bench_harness.c"
 #undef main
 
-enum { OP_CONV, OP_RELU, OP_MAXPOOL, OP_ADD, OP_GAP, OP_GEMM };
-enum { CAT_CONV3, CAT_CONV_OTHER, CAT_PAD, CAT_RELU, CAT_POOL, CAT_ADD_GAP, CAT_GEMM, N_CATS };
+enum { OP_CONV, OP_RELU, OP_MAXPOOL, OP_ADD, OP_GAP, OP_GEMM, OP_CLIP, OP_SILU, OP_CONCAT, OP_UPSAMPLE };
+enum { CAT_CONV3, CAT_CONV_OTHER, CAT_PAD, CAT_RELU, CAT_POOL, CAT_ADD_GAP, CAT_GEMM,
+       CAT_DW, CAT_ACT, CAT_CONCAT, N_CATS };
 static const char* CAT_NAMES[N_CATS] = {
-    "conv3x3_s1_ms", "conv_other_ms", "pad_ms", "relu_ms", "pool_ms", "add_gap_ms", "gemm_ms"
+    "conv3x3_s1_ms", "conv_other_ms", "pad_ms", "relu_ms", "pool_ms", "add_gap_ms", "gemm_ms",
+    "conv_depthwise_ms", "clip_silu_ms", "concat_upsample_ms"
 };
 
 typedef struct { int c, h, w; float* d; } Tensor;
 typedef struct {
     int type, out, in, in2;
-    int cin, cout, k, s, p, m, use_v5;
+    int cin, cout, k, s, p, m, use_v5, depthwise;
+    float lo, hi;       /* clip */
+    int n_ins, ins[8];  /* concat */
     int nin, nout;
     long woff, boff;
     float* pack;        /* packed conv weights */
@@ -33,10 +37,39 @@ static Tensor g_t[MAX_TENSORS];
 static Op g_ops[MAX_OPS];
 static int g_nops;
 static double g_cat[N_CATS];
+#define MAX_OUTPUTS 8
+static int g_outs[MAX_OUTPUTS];
+static int g_n_outs;
 
 static void die(const char* msg) {
     fprintf(stderr, "FATAL: %s\n", msg);
     exit(2);
+}
+
+/* x / (1 + exp(-x)), using the Cephes float exp polynomial */
+static inline void silu_plane(const float* x, float* y, size_t n) {
+    size_t i = 0;
+#if HAS_ARM_NEON
+    for (; i + 4 <= n; i += 4) {
+        float32x4_t v = vld1q_f32(x + i);
+        float32x4_t a = vminq_f32(vmaxq_f32(vnegq_f32(v), vdupq_n_f32(-88.3762626647949f)),
+                                  vdupq_n_f32(88.3762626647949f));
+        int32x4_t e = vcvtnq_s32_f32(vmulq_n_f32(a, 1.44269504088896341f));
+        float32x4_t ef = vcvtq_f32_s32(e);
+        float32x4_t r = vfmsq_n_f32(a, ef, 0.693359375f);
+        r = vfmsq_n_f32(r, ef, -2.12194440e-4f);
+        float32x4_t p = vdupq_n_f32(1.9875691500E-4f);
+        p = vfmaq_f32(vdupq_n_f32(1.3981999507E-3f), p, r);
+        p = vfmaq_f32(vdupq_n_f32(8.3334519073E-3f), p, r);
+        p = vfmaq_f32(vdupq_n_f32(4.1665795894E-2f), p, r);
+        p = vfmaq_f32(vdupq_n_f32(1.6666665459E-1f), p, r);
+        p = vfmaq_f32(vdupq_n_f32(5.0000001201E-1f), p, r);
+        p = vfmaq_f32(vaddq_f32(r, vdupq_n_f32(1.0f)), vmulq_f32(p, r), r);
+        float32x4_t scale = vreinterpretq_f32_s32(vshlq_n_s32(vaddq_s32(e, vdupq_n_s32(127)), 23));
+        vst1q_f32(y + i, vdivq_f32(v, vaddq_f32(vdupq_n_f32(1.0f), vmulq_f32(p, scale))));
+    }
+#endif
+    for (; i < n; i++) y[i] = x[i] / (1.0f + expf(-x[i]));
 }
 
 static void run_conv(Op* o, int T) {
@@ -63,7 +96,9 @@ static void run_conv(Op* o, int T) {
     double t1 = get_time_ms();
     g_cat[CAT_PAD] += t1 - t0;
 
-    if (o->use_v5) {
+    if (o->depthwise) {
+        conv2d_depthwise(src, o->w, out->d, H, W, o->cin, o->k, o->s, T);
+    } else if (o->use_v5) {
         conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
     } else {
         conv2d_direct_packed(src, o->pack, out->d, H, W, o->cin, o->cout, o->k, o->s, T, &path);
@@ -77,7 +112,7 @@ static void run_conv(Op* o, int T) {
             for (size_t i = 0; i < plane; i++) p[i] += b;
         }
     }
-    g_cat[(o->k == 3 && o->s == 1) ? CAT_CONV3 : CAT_CONV_OTHER] += get_time_ms() - t1;
+    g_cat[o->depthwise ? CAT_DW : (o->k == 3 && o->s == 1) ? CAT_CONV3 : CAT_CONV_OTHER] += get_time_ms() - t1;
 }
 
 static void run_op(Op* o, int T) {
@@ -97,6 +132,39 @@ static void run_op(Op* o, int T) {
         float* y = out->d;
         #pragma omp parallel for num_threads(T) schedule(static)
         for (size_t i = 0; i < n; i++) y[i] = a[i] > 0.0f ? a[i] : 0.0f;
+    } else if (o->type == OP_CLIP) {
+        cat = CAT_ACT;
+        const float* a = in->d;
+        float* y = out->d;
+        float lo = o->lo, hi = o->hi;
+        #pragma omp parallel for num_threads(T) schedule(static)
+        for (size_t i = 0; i < n; i++) y[i] = a[i] < lo ? lo : (a[i] > hi ? hi : a[i]);
+    } else if (o->type == OP_SILU) {
+        cat = CAT_ACT;
+        size_t plane = (size_t)in->h * in->w;
+        #pragma omp parallel for num_threads(T) schedule(static)
+        for (int c = 0; c < in->c; c++) silu_plane(in->d + c * plane, out->d + c * plane, plane);
+    } else if (o->type == OP_CONCAT) {
+        cat = CAT_CONCAT;
+        #pragma omp parallel for num_threads(T) schedule(static)
+        for (int i = 0; i < o->n_ins; i++) {
+            size_t before = 0;
+            for (int j = 0; j < i; j++) before += g_t[o->ins[j]].c;
+            Tensor* t = &g_t[o->ins[i]];
+            memcpy(out->d + before * t->h * t->w, t->d, (size_t)t->c * t->h * t->w * sizeof(float));
+        }
+    } else if (o->type == OP_UPSAMPLE) {
+        cat = CAT_CONCAT;
+        int H = in->h, W = in->w;
+        #pragma omp parallel for collapse(2) num_threads(T) schedule(static)
+        for (int c = 0; c < in->c; c++) {
+            for (int r = 0; r < H; r++) {
+                const float* p = in->d + ((size_t)c * H + r) * W;
+                float* y = out->d + ((size_t)c * (H * 2) + r * 2) * (W * 2);
+                for (int x = 0; x < W; x++) y[x * 2] = y[x * 2 + 1] = p[x];
+                memcpy(y + W * 2, y, (size_t)W * 2 * sizeof(float));
+            }
+        }
     } else if (o->type == OP_ADD) {
         const float* a = in->d;
         const float* b = g_t[o->in2].d;
@@ -151,7 +219,7 @@ static void run_op(Op* o, int T) {
     g_cat[cat] += get_time_ms() - t0;
 }
 
-static void load_plan(const char* path, const float* weights, int use_v5, int* in_id, int* out_id) {
+static void load_plan(const char* path, const float* weights, int use_v5, int* in_id) {
     FILE* f = fopen(path, "r");
     if (!f) die("cannot open plan");
     char word[32];
@@ -169,7 +237,17 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
             continue;
         }
         if (strcmp(word, "OUTPUT") == 0) {
-            if (fscanf(f, "%d", out_id) != 1) die("bad OUTPUT");
+            if (g_n_outs >= MAX_OUTPUTS || fscanf(f, "%d", &g_outs[g_n_outs++]) != 1) die("bad OUTPUT");
+            continue;
+        }
+        if (strcmp(word, "SPLIT") == 0) {
+            /* Channels are contiguous, so both halves point into the input: no op, no copy */
+            int a, b, src;
+            if (fscanf(f, "%d %d %d", &a, &b, &src) != 3) die("bad SPLIT");
+            free(g_t[a].d);
+            free(g_t[b].d);
+            g_t[a].d = g_t[src].d;
+            g_t[b].d = g_t[src].d + (size_t)g_t[a].c * g_t[a].h * g_t[a].w;
             continue;
         }
         if (strcmp(word, "CONV") == 0) {
@@ -193,6 +271,36 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
                 o->pad = v5_alloc(n);
                 memset(o->pad, 0, n * sizeof(float));
             }
+        } else if (strcmp(word, "DWCONV") == 0) {
+            o->type = OP_CONV;
+            o->depthwise = 1;
+            if (fscanf(f, "%d %d %d %d %d %d %ld %ld", &o->out, &o->in, &o->cin, &o->k, &o->s, &o->p,
+                       &o->woff, &o->boff) != 8) die("bad DWCONV");
+            o->cout = o->cin;
+            o->w = weights + o->woff;
+            o->bias = o->boff >= 0 ? weights + o->boff : NULL;
+            if (o->p) {
+                Tensor* in = &g_t[o->in];
+                size_t n = (size_t)o->cin * (in->h + 2 * o->p) * (in->w + 2 * o->p);
+                o->pad = v5_alloc(n);
+                memset(o->pad, 0, n * sizeof(float));
+            }
+        } else if (strcmp(word, "CLIP") == 0) {
+            o->type = OP_CLIP;
+            if (fscanf(f, "%d %d %f %f", &o->out, &o->in, &o->lo, &o->hi) != 4) die("bad CLIP");
+        } else if (strcmp(word, "SILU") == 0) {
+            o->type = OP_SILU;
+            if (fscanf(f, "%d %d", &o->out, &o->in) != 2) die("bad SILU");
+        } else if (strcmp(word, "UPSAMPLE") == 0) {
+            o->type = OP_UPSAMPLE;
+            if (fscanf(f, "%d %d", &o->out, &o->in) != 2) die("bad UPSAMPLE");
+        } else if (strcmp(word, "CONCAT") == 0) {
+            o->type = OP_CONCAT;
+            if (fscanf(f, "%d %d", &o->out, &o->n_ins) != 2 || o->n_ins > 8) die("bad CONCAT");
+            for (int i = 0; i < o->n_ins; i++) {
+                if (fscanf(f, "%d", &o->ins[i]) != 1) die("bad CONCAT");
+            }
+            o->in = o->ins[0];
         } else if (strcmp(word, "RELU") == 0) {
             o->type = OP_RELU;
             if (fscanf(f, "%d %d", &o->out, &o->in) != 2) die("bad RELU");
@@ -252,9 +360,9 @@ int main(int argc, char** argv) {
     if (strcmp(variant, "v5_batched") != 0 && strcmp(variant, "direct_packed") != 0) die("unknown variant");
 
     float* weights = read_floats(weights_path, NULL);
-    int in_id = -1, out_id = -1;
-    load_plan(plan, weights, strcmp(variant, "v5_batched") == 0, &in_id, &out_id);
-    if (in_id < 0 || out_id < 0) die("plan has no INPUT or OUTPUT");
+    int in_id = -1;
+    load_plan(plan, weights, strcmp(variant, "v5_batched") == 0, &in_id);
+    if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
 
     size_t n_in = 0;
     float* input = read_floats(input_path, &n_in);
@@ -286,8 +394,10 @@ int main(int argc, char** argv) {
 
     FILE* fo = fopen(output_path, "wb");
     if (!fo) die("cannot open output");
-    Tensor* o = &g_t[out_id];
-    fwrite(o->d, sizeof(float), (size_t)o->c * o->h * o->w, fo);
+    for (int i = 0; i < g_n_outs; i++) {
+        Tensor* o = &g_t[g_outs[i]];
+        fwrite(o->d, sizeof(float), (size_t)o->c * o->h * o->w, fo);
+    }
     fclose(fo);
     return 0;
 }

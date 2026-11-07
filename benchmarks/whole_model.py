@@ -9,6 +9,7 @@ Generated plans and weights go in build/models/, which git ignores.
 """
 import argparse
 import collections
+from concurrent.futures import ProcessPoolExecutor
 import csv
 import datetime
 import multiprocessing as mp
@@ -26,7 +27,7 @@ import onnxruntime as ort
 from scipy import stats
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from benchmarks.e2e_benchmark import MODELS, _export_onnx
+from benchmarks.e2e_benchmark import WHOLE_MODELS as MODELS, _export_onnx
 from src.cache_adaptive_autotiler import CacheAdaptiveAutotiler
 from src.harness_runner import ROOT, SRC, build
 
@@ -40,7 +41,14 @@ ENGINES = [
     ("c_nonfused", "v5_batched", ALL_TILES),
     ("c_direct_packed", "direct_packed", None),
 ]
-CATEGORIES = ["conv3x3_s1_ms", "conv_other_ms", "pad_ms", "relu_ms", "pool_ms", "add_gap_ms", "gemm_ms"]
+CATEGORIES = ["conv3x3_s1_ms", "conv_other_ms", "pad_ms", "relu_ms", "pool_ms", "add_gap_ms", "gemm_ms",
+              "conv_depthwise_ms", "clip_silu_ms", "concat_upsample_ms"]
+
+
+def in_own_process(fn, *args):
+    """Run fn in a fresh process. Unlike multiprocessing.Pool, a crash raises instead of hanging."""
+    with ProcessPoolExecutor(1, mp_context=mp.get_context("spawn")) as pool:
+        return pool.submit(fn, *args).result()
 
 
 def export_plan(model_name):
@@ -67,6 +75,9 @@ def export_plan(model_name):
         next_id[0] += 1
         return ids[name]
 
+    aliased = set()  # Split halves share their input's memory, so nothing writes them in place
+    sigmoids = {}
+
     def reuse(name, source, shape):
         ids[name] = ids[source]
         shapes[name] = shape
@@ -90,7 +101,19 @@ def export_plan(model_name):
             op, a = node.op_type, attrs(node)
             name = node.output[0]
             src = node.input[0]
-            if op == "Conv":
+            if op == "Conv" and a["group"] != 1:
+                k, s, p = a["kernel_shape"], a["strides"], a["pads"]
+                assert k[0] == k[1] and s[0] == s[1] and len(set(p)) == 1 and set(a["dilations"]) == {1}
+                W = inits[node.input[1]]
+                ci, hi, wi = shapes[src]
+                assert a["group"] == ci and W.shape[:2] == (ci, 1)  # depthwise only
+                ho = (hi + 2 * p[0] - k[0]) // s[0] + 1
+                wo = (wi + 2 * p[0] - k[0]) // s[0] + 1
+                woff = store(W)
+                boff = store(inits[node.input[2]]) if len(node.input) > 2 and node.input[2] else -1
+                out = new_tensor(name, (ci, ho, wo))
+                lines.append(f"DWCONV {out} {ids[src]} {ci} {k[0]} {s[0]} {p[0]} {woff} {boff}")
+            elif op == "Conv":
                 k, s, p = a["kernel_shape"], a["strides"], a["pads"]
                 assert a["group"] == 1 and set(a["dilations"]) == {1}
                 assert k[0] == k[1] and s[0] == s[1] and len(set(p)) == 1
@@ -108,9 +131,43 @@ def export_plan(model_name):
                 out = new_tensor(name, (cout, ho, wo))
                 lines.append(f"CONV {out} {ids[src]} {cin} {cout} {k[0]} {s[0]} {p[0]} {m} {woff} {boff}")
             elif op == "Relu":
-                in_place = consumers[src] == 1 and src != graph_input.name
+                in_place = consumers[src] == 1 and src != graph_input.name and src not in aliased
                 out = reuse(name, src, shapes[src]) if in_place else new_tensor(name, shapes[src])
                 lines.append(f"RELU {out} {ids[src]}")
+            elif op == "Clip":
+                lo, hi = (float(inits[x]) for x in node.input[1:3])
+                in_place = consumers[src] == 1 and src != graph_input.name and src not in aliased
+                out = reuse(name, src, shapes[src]) if in_place else new_tensor(name, shapes[src])
+                lines.append(f"CLIP {out} {ids[src]} {lo} {hi}")
+            elif op == "Sigmoid":
+                assert consumers[name] == 1
+                sigmoids[name] = src  # emitted as SILU at the Mul that follows
+            elif op == "Mul":
+                x, y = node.input[0], node.input[1]
+                sig, val = (y, x) if y in sigmoids else (x, y)
+                assert sigmoids[sig] == val  # only x * sigmoid(x)
+                in_place = consumers[val] == 2 and val != graph_input.name and val not in aliased
+                out = reuse(name, val, shapes[val]) if in_place else new_tensor(name, shapes[val])
+                lines.append(f"SILU {out} {ids[val]}")
+            elif op == "Split":
+                assert a["axis"] == 1 and a["num_outputs"] == 2 and consumers[src] == 1
+                ci, hi, wi = shapes[src]
+                assert ci % 2 == 0
+                x, y = new_tensor(node.output[0], (ci // 2, hi, wi)), new_tensor(node.output[1], (ci // 2, hi, wi))
+                aliased.update(node.output)
+                lines.append(f"SPLIT {x} {y} {ids[src]}")
+            elif op == "Concat":
+                assert a["axis"] == 1
+                hi, wi = shapes[src][1:]
+                assert all(shapes[x][1:] == (hi, wi) for x in node.input)
+                out = new_tensor(name, (sum(shapes[x][0] for x in node.input), hi, wi))
+                lines.append(f"CONCAT {out} {len(node.input)} " + " ".join(str(ids[x]) for x in node.input))
+            elif op == "Resize":
+                assert a["mode"] == b"nearest" and a["coordinate_transformation_mode"] == b"asymmetric"
+                assert inits[node.input[2]].tolist() == [1.0, 1.0, 2.0, 2.0]
+                ci, hi, wi = shapes[src]
+                out = new_tensor(name, (ci, hi * 2, wi * 2))
+                lines.append(f"UPSAMPLE {out} {ids[src]}")
             elif op == "MaxPool":
                 k, s, p = a["kernel_shape"][0], a["strides"][0], a["pads"][0]
                 assert len(set(a["pads"])) == 1 and a["ceil_mode"] == 0
@@ -122,9 +179,9 @@ def export_plan(model_name):
                 reuse(name, src, shapes[src])
             elif op == "Add":
                 b = node.input[1]
-                if consumers[src] == 1:
+                if consumers[src] == 1 and src not in aliased:
                     out = reuse(name, src, shapes[src])
-                elif consumers[b] == 1:
+                elif consumers[b] == 1 and b not in aliased:
                     out = reuse(name, b, shapes[b])
                 else:
                     out = new_tensor(name, shapes[src])
@@ -149,7 +206,7 @@ def export_plan(model_name):
             else:
                 raise ValueError(f"Unsupported op {op}")
 
-    lines.append(f"OUTPUT {ids[graph.output[0].name]}")
+    lines.extend(f"OUTPUT {ids[o.name]}" for o in graph.output)
     with open(plan_path, "w") as f:
         f.write("\n".join(lines) + "\n")
     return plan_path, weights_path, onnx_path, (c, h, w)
@@ -167,9 +224,9 @@ def run_ort(onnx_path, input_path, shape, threads, runs, warmup):
     lats = []
     for _ in range(runs):
         t0 = time.perf_counter()
-        out = session.run(None, {name: x})[0]
+        out = session.run(None, {name: x})
         lats.append((time.perf_counter() - t0) * 1000.0)
-    return lats, out.ravel()
+    return lats, np.concatenate([o.ravel() for o in out])
 
 
 def run_c(plan, weights, input_path, variant, batch, threads, runs, warmup):
@@ -204,7 +261,6 @@ def main():
                               universal_newlines=True).stdout.strip()
     timestamp = datetime.datetime.now().isoformat()
     models = MODELS if args.models == "all" else args.models.split(",")
-    ctx = mp.get_context("spawn")
     os.makedirs(os.path.dirname(args.raw), exist_ok=True)
     os.makedirs(os.path.dirname(args.summary), exist_ok=True)
     raw_fields = ["timestamp", "git_hash", "model", "engine", "threads", "run_id", "total_ms"] + CATEGORIES + \
@@ -221,8 +277,7 @@ def main():
             input_path = os.path.join(PLAN_DIR, f"{model}.input")
             np.random.RandomState(0).randn(1, *shape).astype(np.float32).tofile(input_path)
             for T in (int(t) for t in args.threads.split(",")):
-                with ctx.Pool(1) as pool:
-                    ort_lats, ort_out = pool.apply(run_ort, (onnx_path, input_path, shape, T, args.runs, args.warmup))
+                ort_lats, ort_out = in_own_process(run_ort, onnx_path, input_path, shape, T, args.runs, args.warmup)
                 for i, lat in enumerate(ort_lats):
                     raw.writerow({"timestamp": timestamp, "git_hash": git_hash, "model": model,
                                   "engine": "onnxruntime", "threads": T, "run_id": i, "total_ms": lat})

@@ -1159,6 +1159,70 @@ void conv2d_direct_packed(
 }
 
 /* -------------------------------------------------------------------------
+ * 10. depthwise: One k x k filter per channel, with NEON for 3x3 at stride 1 and 2
+ * ------------------------------------------------------------------------- */
+__attribute__((always_inline))
+static inline void dw3_row(const float* r0, const float* r1, const float* r2, const float* f,
+                           float* y, int Wout, int W, int s) {
+    int wo = 0;
+    if (s == 1) {
+        for (; wo + 4 <= Wout; wo += 4) {
+            *(v4f*)(y + wo) =
+                *(const v4f*)(r0 + wo) * f[0] + *(const v4f*)(r0 + wo + 1) * f[1] + *(const v4f*)(r0 + wo + 2) * f[2] +
+                *(const v4f*)(r1 + wo) * f[3] + *(const v4f*)(r1 + wo + 1) * f[4] + *(const v4f*)(r1 + wo + 2) * f[5] +
+                *(const v4f*)(r2 + wo) * f[6] + *(const v4f*)(r2 + wo + 1) * f[7] + *(const v4f*)(r2 + wo + 2) * f[8];
+        }
+    } else if (s == 2) {
+        /* Every other pixel of 8; the +9 keeps the last load inside the row */
+        for (; wo * 2 + 9 < W && wo + 4 <= Wout; wo += 4) {
+            v4f acc = {0.0f, 0.0f, 0.0f, 0.0f};
+            const float* rows[3] = {r0, r1, r2};
+            for (int r = 0; r < 3; r++) {
+                const float* p = rows[r] + wo * 2;
+                v4f a0 = *(const v4f*)p, a1 = *(const v4f*)(p + 4);
+                v4f b0 = *(const v4f*)(p + 1), b1 = *(const v4f*)(p + 5);
+                v4f evens = __builtin_shufflevector(a0, a1, 0, 2, 4, 6);
+                v4f odds = __builtin_shufflevector(b0, b1, 0, 2, 4, 6);
+                v4f thirds = __builtin_shufflevector(a0, a1, 2, 4, 6, 6);
+                thirds[3] = p[8];
+                acc += evens * f[r * 3] + odds * f[r * 3 + 1] + thirds * f[r * 3 + 2];
+            }
+            *(v4f*)(y + wo) = acc;
+        }
+    }
+    for (; wo < Wout; wo++) {
+        const float* a = r0 + wo * s, *b = r1 + wo * s, *c = r2 + wo * s;
+        y[wo] = a[0] * f[0] + a[1] * f[1] + a[2] * f[2] + b[0] * f[3] + b[1] * f[4] + b[2] * f[5] +
+                c[0] * f[6] + c[1] * f[7] + c[2] * f[8];
+    }
+}
+
+/* weights: [C][k*k] */
+void conv2d_depthwise(const float* input, const float* weights, float* output,
+                      int H, int W, int C, int k, int s, int T) {
+    int Hout = (H - k) / s + 1, Wout = (W - k) / s + 1, taps = k * k;
+    #pragma omp parallel for collapse(2) num_threads(T) schedule(static)
+    for (int c = 0; c < C; c++) {
+        for (int ho = 0; ho < Hout; ho++) {
+            const float* r = input + (size_t)c * H * W + (size_t)ho * s * W;
+            const float* f = weights + (size_t)c * taps;
+            float* y = output + ((size_t)c * Hout + ho) * Wout;
+            if (k == 3 && s == 1) {
+                dw3_row(r, r + W, r + 2 * W, f, y, Wout, W, 1);
+            } else if (k == 3 && s == 2) {
+                dw3_row(r, r + W, r + 2 * W, f, y, Wout, W, 2);
+            } else {
+                for (int wo = 0; wo < Wout; wo++) {
+                    float sum = 0.0f;
+                    for (int t = 0; t < taps; t++) sum += r[(t / k) * W + t % k + wo * s] * f[t];
+                    y[wo] = sum;
+                }
+            }
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------
  * Shared library export for Python ctypes wrapper
  * ------------------------------------------------------------------------- */
 void fused_winograd_conv2d(
@@ -1366,6 +1430,40 @@ int run_harness_selftest(void) {
         g_dp_block = saved_block;
         printf("  direct_packed OK (k 1-11, stride 1-4, padding, partial blocks, both threading modes)\n");
         free(in3);
+    }
+
+    /* depthwise: every kernel, stride and thread count against a plain loop */
+    {
+        int dh = 19, dw = 23, dc = 5;
+        size_t dn = (size_t)dc * dh * dw;
+        float* din = (float*)malloc(dn * sizeof(float));
+        for (size_t i = 0; i < dn; i++) din[i] = (float)((long long)(i % 29) - 14) / 7.0f;
+        int dks[] = {1, 3, 5}, dss[] = {1, 2, 3};
+        for (int ki = 0; ki < 3; ki++) for (int si = 0; si < 3; si++) for (int ti = 0; ti < 2; ti++) {
+            int k = dks[ki], s = dss[si], taps = k * k;
+            int ho = (dh - k) / s + 1, wo = (dw - k) / s + 1;
+            size_t on = (size_t)dc * ho * wo;
+            float* f = (float*)malloc((size_t)dc * taps * sizeof(float));
+            for (int i = 0; i < dc * taps; i++) f[i] = (float)(i % 11 - 5) / 3.0f;
+            float* out = (float*)malloc(on * sizeof(float));
+            conv2d_depthwise(din, f, out, dh, dw, dc, k, s, test_T_vals[ti]);
+            for (int c = 0; c < dc; c++) for (int y = 0; y < ho; y++) for (int x = 0; x < wo; x++) {
+                float sum = 0.0f;
+                for (int kh = 0; kh < k; kh++) for (int kw = 0; kw < k; kw++) {
+                    sum += din[((size_t)c * dh + y * s + kh) * dw + x * s + kw] * f[c * taps + kh * k + kw];
+                }
+                float got = out[((size_t)c * ho + y) * wo + x];
+                if (fabsf(got - sum) > 1e-3f) {
+                    fprintf(stderr, "FATAL: depthwise k=%d s=%d T=%d at c=%d y=%d x=%d: %f vs %f\n",
+                            k, s, test_T_vals[ti], c, y, x, got, sum);
+                    return 1;
+                }
+            }
+            free(f);
+            free(out);
+        }
+        free(din);
+        printf("  depthwise OK (k 1-5, stride 1-3, both thread counts)\n");
     }
 
     printf("  [PASSED] All variant path assertions and numerical tolerances validated.\n");

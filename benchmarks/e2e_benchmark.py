@@ -66,12 +66,15 @@ except ImportError:
     TVM_AVAILABLE = False
 
 MODELS = ["alexnet", "resnet18", "resnet34", "vgg16"]
+WHOLE_MODELS = MODELS + ["mobilenet_v2", "yolov8n"]  # need depthwise or YOLO ops, so whole-model tools only
 
 MODEL_DISPLAY = {
     "alexnet": "AlexNet",
     "resnet18": "ResNet-18",
     "resnet34": "ResNet-34",
     "vgg16": "VGG16",
+    "mobilenet_v2": "MobileNetV2",
+    "yolov8n": "YOLOv8n",
 }
 
 
@@ -270,17 +273,53 @@ def benchmark_onnxruntime_e2e(model_name, n_runs, warmup, threads):
     return latencies
 
 
+def _calibrate_batch_norm(model, shape):
+    """Set batch norm statistics from random data. With random weights and default
+    statistics the signal fades through deep models, leaving near-constant outputs
+    that would match even if an engine ran the graph wrongly."""
+    for m in model.modules():
+        if isinstance(m, torch.nn.BatchNorm2d):
+            m.reset_running_stats()
+            m.momentum = None  # plain average over the batches below
+    model.train()
+    with torch.no_grad():
+        for _ in range(4):
+            model(torch.randn(2, *shape))
+    model.eval()
+
+
+def _export_yolov8n(path):
+    """YOLOv8n up to its three raw head outputs: box decoding isn't part of the network."""
+    from ultralytics.nn.tasks import DetectionModel  # AGPL, used only to build the graph
+
+    torch.manual_seed(0)
+    model = DetectionModel("yolov8n.yaml", nc=80, verbose=False).eval()
+    head = model.model[-1]
+    head.forward = lambda x: [torch.cat((head.cv2[i](x[i]), head.cv3[i](x[i])), 1) for i in range(head.nl)]
+    _calibrate_batch_norm(model, (3, 640, 640))
+    torch.onnx.export(model, torch.randn(1, 3, 640, 640), path, opset_version=13,
+                      input_names=["input"], output_names=["out0", "out1", "out2"])
+
+
 def _export_onnx(model_name, path):
-    """Export a torchvision model to ONNX."""
+    """Export a model to ONNX with random weights."""
+    if model_name == "yolov8n":
+        _export_yolov8n(path)
+        return
     model_fn = {
         "alexnet": models.alexnet,
         "resnet18": models.resnet18,
         "resnet34": models.resnet34,
         "vgg16": models.vgg16,
+        "mobilenet_v2": models.mobilenet_v2,
     }
     if model_name not in model_fn:
         return
     model = model_fn[model_name](weights=None).eval()
+    if model_name == "mobilenet_v2":
+        torch.manual_seed(0)
+        model = model_fn[model_name](weights=None)
+        _calibrate_batch_norm(model, (3, 224, 224))
     dummy = torch.randn(1, 3, 224, 224)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     torch.onnx.export(model, dummy, path, opset_version=13,

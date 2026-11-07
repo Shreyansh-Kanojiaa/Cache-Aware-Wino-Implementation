@@ -16,13 +16,16 @@
 #define MAX_T 256
 #define MAX_LINES 1024
 
-typedef struct { char op[16]; int a[10]; long l[2]; } Line;
+typedef struct { char op[16]; int a[12]; long l[2]; float f[2]; } Line;
 typedef struct { int c, h, w; uint32_t value; int defined; } Tn;
 
 static Line g_lines[MAX_LINES];
 static int g_n;
 static Tn g_tn[MAX_T];
 static xnn_subgraph_t g_sg;
+#define MAX_OUTPUTS 8
+static int g_outs[MAX_OUTPUTS];
+static int g_n_outs;
 
 static void die(const char* msg) {
     fprintf(stderr, "FATAL: %s\n", msg);
@@ -55,7 +58,7 @@ static float* read_floats(const char* path, size_t* count, size_t extra) {
     return d;
 }
 
-static void read_plan(const char* path, int* in_id, int* out_id) {
+static void read_plan(const char* path, int* in_id) {
     FILE* f = fopen(path, "r");
     if (!f) die("cannot open plan");
     char w[16];
@@ -67,7 +70,7 @@ static void read_plan(const char* path, int* in_id, int* out_id) {
         } else if (strcmp(w, "INPUT") == 0) {
             if (fscanf(f, "%d", in_id) != 1) die("bad INPUT");
         } else if (strcmp(w, "OUTPUT") == 0) {
-            if (fscanf(f, "%d", out_id) != 1) die("bad OUTPUT");
+            if (g_n_outs >= MAX_OUTPUTS || fscanf(f, "%d", &g_outs[g_n_outs++]) != 1) die("bad OUTPUT");
         } else {
             Line* L = &g_lines[g_n++];
             memset(L, 0, sizeof(*L));
@@ -76,7 +79,20 @@ static void read_plan(const char* path, int* in_id, int* out_id) {
             if (strcmp(w, "CONV") == 0) {
                 ok = fscanf(f, "%d %d %d %d %d %d %d %d %ld %ld", &L->a[0], &L->a[1], &L->a[2], &L->a[3], &L->a[4],
                             &L->a[5], &L->a[6], &L->a[7], &L->l[0], &L->l[1]) == 10;
-            } else if (strcmp(w, "RELU") == 0 || strcmp(w, "GAP") == 0) {
+            } else if (strcmp(w, "DWCONV") == 0) {
+                ok = fscanf(f, "%d %d %d %d %d %d %ld %ld", &L->a[0], &L->a[1], &L->a[2], &L->a[4], &L->a[5],
+                            &L->a[6], &L->l[0], &L->l[1]) == 8;
+            } else if (strcmp(w, "CLIP") == 0) {
+                ok = fscanf(f, "%d %d %f %f", &L->a[0], &L->a[1], &L->f[0], &L->f[1]) == 4;
+            } else if (strcmp(w, "SPLIT") == 0) {
+                /* a[1] stays the input, as for every other op */
+                ok = fscanf(f, "%d %d %d", &L->a[0], &L->a[2], &L->a[1]) == 3;
+            } else if (strcmp(w, "CONCAT") == 0) {
+                /* a[2] is the count; inputs are a[1] then a[3] onward */
+                ok = fscanf(f, "%d %d %d", &L->a[0], &L->a[2], &L->a[1]) == 3 && L->a[2] <= 8;
+                for (int j = 3; ok && j < L->a[2] + 2; j++) ok = fscanf(f, "%d", &L->a[j]) == 1;
+            } else if (strcmp(w, "RELU") == 0 || strcmp(w, "GAP") == 0 || strcmp(w, "SILU") == 0 ||
+                       strcmp(w, "UPSAMPLE") == 0) {
                 ok = fscanf(f, "%d %d", &L->a[0], &L->a[1]) == 2;
             } else if (strcmp(w, "MAXPOOL") == 0) {
                 ok = fscanf(f, "%d %d %d %d %d", &L->a[0], &L->a[1], &L->a[2], &L->a[3], &L->a[4]) == 5;
@@ -93,14 +109,18 @@ static void read_plan(const char* path, int* in_id, int* out_id) {
     fclose(f);
 }
 
-/* Value for one op's output; the last write to the plan's output tensor is external. */
-static uint32_t output_value(int plan_id, int line, int out_id, int c, int h, int w, uint32_t ext) {
+/* Value for one op's output; the last write to a plan output tensor is external. */
+static uint32_t output_value(int plan_id, int line, int c, int h, int w) {
     int is_output = 0;
-    if (plan_id == out_id) {
-        is_output = 1;
-        for (int j = line + 1; j < g_n; j++) {
-            if (g_lines[j].a[0] == out_id) is_output = 0;
+    uint32_t ext = XNN_INVALID_VALUE_ID;
+    for (int k = 0; k < g_n_outs; k++) {
+        if (g_outs[k] == plan_id) {
+            is_output = 1;
+            ext = 1 + (uint32_t)k;
         }
+    }
+    for (int j = line + 1; is_output && j < g_n; j++) {
+        if (g_lines[j].a[0] == plan_id) is_output = 0;
     }
     size_t dims[4] = {1, (size_t)h, (size_t)w, (size_t)c};
     uint32_t id = new_value(4, dims, NULL, is_output ? ext : XNN_INVALID_VALUE_ID,
@@ -126,13 +146,13 @@ int main(int argc, char** argv) {
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
 
     check(xnn_initialize(NULL), "initialize");
-    int in_id = -1, out_id = -1;
-    read_plan(plan, &in_id, &out_id);
-    if (in_id < 0 || out_id < 0) die("plan has no INPUT or OUTPUT");
+    int in_id = -1;
+    read_plan(plan, &in_id);
+    if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
     float* weights = read_floats(weights_path, NULL, 0);
 
-    const uint32_t EXT_IN = 0, EXT_OUT = 1;
-    check(xnn_create_subgraph(2, 0, &g_sg), "create subgraph");
+    const uint32_t EXT_IN = 0;
+    check(xnn_create_subgraph(1 + g_n_outs, 0, &g_sg), "create subgraph");
 
     /* Input: CHW file to the HWC layout XNNPACK takes */
     Tn* ti = &g_tn[in_id];
@@ -178,27 +198,82 @@ int main(int argc, char** argv) {
                 size_t bd[1] = {(size_t)cout};
                 b = new_value(1, bd, weights + L->l[1], XNN_INVALID_VALUE_ID, 0);
             }
-            uint32_t o = output_value(out, i, out_id, dst->c, dst->h, dst->w, EXT_OUT);
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
             check(xnn_define_convolution_2d(g_sg, p, p, p, p, k, k, s, s, 1, 1, 1, cin, cout, -INF, INF,
                                             in_v, f, b, o, 0), "define conv");
+        } else if (strcmp(L->op, "DWCONV") == 0) {
+            int c = L->a[2], k = L->a[4], s = L->a[5], p = L->a[6];
+            /* ONNX [C, 1, k, k] to XNNPACK [1, k, k, C] */
+            float* filter = (float*)malloc((size_t)c * k * k * sizeof(float));
+            const float* W = weights + L->l[0];
+            for (int ci = 0; ci < c; ci++) {
+                for (int t = 0; t < k * k; t++) filter[(size_t)t * c + ci] = W[(size_t)ci * k * k + t];
+            }
+            size_t fd[4] = {1, (size_t)k, (size_t)k, (size_t)c};
+            uint32_t f = new_value(4, fd, filter, XNN_INVALID_VALUE_ID, 0);
+            uint32_t b = XNN_INVALID_VALUE_ID;
+            if (L->l[1] >= 0) {
+                size_t bd[1] = {(size_t)c};
+                b = new_value(1, bd, weights + L->l[1], XNN_INVALID_VALUE_ID, 0);
+            }
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
+            check(xnn_define_depthwise_convolution_2d(g_sg, p, p, p, p, k, k, s, s, 1, 1, 1, c, -INF, INF,
+                                                      in_v, f, b, o, 0), "define depthwise conv");
+        } else if (strcmp(L->op, "CLIP") == 0) {
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
+            union xnn_unary_params params;
+            params.clamp.min = L->f[0];
+            params.clamp.max = L->f[1];
+            check(xnn_define_unary(g_sg, xnn_unary_clamp, &params, in_v, o, 0), "define clip");
+        } else if (strcmp(L->op, "SILU") == 0) {
+            size_t d[4] = {1, (size_t)src->h, (size_t)src->w, (size_t)src->c};
+            uint32_t sig = new_value(4, d, NULL, XNN_INVALID_VALUE_ID, 0);
+            check(xnn_define_unary(g_sg, xnn_unary_sigmoid, NULL, in_v, sig, 0), "define sigmoid");
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
+            check(xnn_define_binary(g_sg, xnn_binary_multiply, NULL, in_v, sig, o, 0), "define multiply");
+        } else if (strcmp(L->op, "SPLIT") == 0) {
+            Tn* d2 = &g_tn[L->a[2]];
+            size_t off0[4] = {0, 0, 0, 0}, off1[4] = {0, 0, 0, (size_t)dst->c};
+            size_t size[4] = {1, (size_t)dst->h, (size_t)dst->w, (size_t)dst->c};
+            uint32_t o0 = output_value(out, i, dst->c, dst->h, dst->w);
+            uint32_t o1 = output_value(L->a[2], i, d2->c, d2->h, d2->w);
+            check(xnn_define_static_slice(g_sg, 4, off0, size, in_v, o0, 0), "define slice");
+            check(xnn_define_static_slice(g_sg, 4, off1, size, in_v, o1, 0), "define slice");
+        } else if (strcmp(L->op, "CONCAT") == 0) {
+            uint32_t ids[8];
+            ids[0] = in_v;
+            for (int j = 1; j < L->a[2]; j++) ids[j] = g_tn[L->a[j + 2]].value;
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
+            check(xnn_define_concatenate(g_sg, 3, (size_t)L->a[2], ids, o, 0), "define concat");
+        } else if (strcmp(L->op, "UPSAMPLE") == 0) {
+            /* XNNPACK has no nearest resize, so use a fixed depthwise deconvolution of ones,
+             * which gives the same pixels. This may cost more than a real nearest resize. */
+            int c = src->c;
+            float* ones = (float*)malloc((size_t)c * 4 * sizeof(float));
+            for (int j = 0; j < c * 4; j++) ones[j] = 1.0f;
+            size_t fd[4] = {(size_t)c, 2, 2, 1};
+            uint32_t f = new_value(4, fd, ones, XNN_INVALID_VALUE_ID, 0);
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
+            check(xnn_define_deconvolution_2d(g_sg, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 1, 1, c, 1, 1, -INF, INF,
+                                              in_v, f, XNN_INVALID_VALUE_ID, o, 0), "define upsample");
         } else if (strcmp(L->op, "RELU") == 0) {
-            uint32_t o = output_value(out, i, out_id, dst->c, dst->h, dst->w, EXT_OUT);
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
             union xnn_unary_params params;
             params.clamp.min = 0.0f;
             params.clamp.max = INF;
             check(xnn_define_unary(g_sg, xnn_unary_clamp, &params, in_v, o, 0), "define relu");
         } else if (strcmp(L->op, "MAXPOOL") == 0) {
             int k = L->a[2], s = L->a[3], p = L->a[4];
-            uint32_t o = output_value(out, i, out_id, dst->c, dst->h, dst->w, EXT_OUT);
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
             check(xnn_define_max_pooling_2d(g_sg, p, p, p, p, k, k, s, s, 1, 1, -INF, INF, in_v, o, 0), "define maxpool");
         } else if (strcmp(L->op, "ADD") == 0) {
             uint32_t b = g_tn[L->a[2]].value;
             if (b == XNN_INVALID_VALUE_ID) die("add input has no value");
-            uint32_t o = output_value(out, i, out_id, dst->c, dst->h, dst->w, EXT_OUT);
+            uint32_t o = output_value(out, i, dst->c, dst->h, dst->w);
             check(xnn_define_binary(g_sg, xnn_binary_add, NULL, in_v, b, o, 0), "define add");
         } else if (strcmp(L->op, "GAP") == 0) {
             const size_t axes[2] = {1, 2};
-            uint32_t o = output_value(out, i, out_id, dst->c, 1, 1, EXT_OUT);
+            uint32_t o = output_value(out, i, dst->c, 1, 1);
             check(xnn_define_static_reduce(g_sg, xnn_reduce_mean, 2, axes, in_v, o, XNN_FLAG_KEEP_DIMS), "define mean");
         } else if (strcmp(L->op, "GEMM") == 0) {
             int nin = L->a[2], nout = L->a[3];
@@ -220,23 +295,26 @@ int main(int argc, char** argv) {
                 size_t bd[1] = {(size_t)nout};
                 b = new_value(1, bd, weights + L->l[1], XNN_INVALID_VALUE_ID, 0);
             }
-            uint32_t o = output_value(out, i, out_id, nout, 1, 1, EXT_OUT);
+            uint32_t o = output_value(out, i, nout, 1, 1);
             check(xnn_define_fully_connected(g_sg, -INF, INF, in_v, f, b, o, 0), "define fc");
         } else {
             die("unknown op");
         }
     }
 
-    Tn* to = &g_tn[out_id];
-    size_t n_out = (size_t)to->c * to->h * to->w;
-    float* output = (float*)malloc(n_out * sizeof(float) + XNN_EXTRA_BYTES);
+    float* outputs[MAX_OUTPUTS];
+    struct xnn_external_value ext[1 + MAX_OUTPUTS] = {{EXT_IN, hwc}};
+    for (int k = 0; k < g_n_outs; k++) {
+        Tn* to = &g_tn[g_outs[k]];
+        outputs[k] = (float*)malloc((size_t)to->c * to->h * to->w * sizeof(float) + XNN_EXTRA_BYTES);
+        ext[1 + k] = (struct xnn_external_value){1 + (uint32_t)k, outputs[k]};
+    }
 
     pthreadpool_t pool = pthreadpool_create((size_t)T);
     xnn_runtime_t rt = NULL;
     check(xnn_create_runtime_v2(g_sg, pool, 0, &rt), "create runtime");
-    struct xnn_external_value ext[2] = {{EXT_IN, hwc}, {EXT_OUT, output}};
     check(xnn_reshape_runtime(rt), "reshape runtime");
-    check(xnn_setup_runtime_v2(rt, 2, ext), "setup runtime");
+    check(xnn_setup_runtime_v2(rt, 1 + g_n_outs, ext), "setup runtime");
 
     for (int r = 0; r < warmup; r++) check(xnn_invoke_runtime(rt), "invoke");
 
@@ -255,7 +333,15 @@ int main(int argc, char** argv) {
 
     FILE* fo = fopen(output_path, "wb");
     if (!fo) die("cannot open output");
-    fwrite(output, sizeof(float), n_out, fo);
+    for (int k = 0; k < g_n_outs; k++) {
+        /* HWC back to ONNX's CHW; fully connected outputs are flat, so this leaves them alone */
+        Tn* to = &g_tn[g_outs[k]];
+        for (int c = 0; c < to->c; c++) {
+            for (size_t px = 0; px < (size_t)to->h * to->w; px++) {
+                fwrite(&outputs[k][px * to->c + c], sizeof(float), 1, fo);
+            }
+        }
+    }
     fclose(fo);
     return 0;
 }

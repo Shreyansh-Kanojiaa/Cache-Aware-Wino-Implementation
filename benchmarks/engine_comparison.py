@@ -13,7 +13,6 @@ import collections
 import csv
 import datetime
 import glob
-import multiprocessing as mp
 import os
 import statistics as st
 import subprocess
@@ -25,8 +24,8 @@ import numpy as np
 from scipy import stats
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from benchmarks.e2e_benchmark import MODELS
-from benchmarks.whole_model import ENGINES as C_ENGINES, PLAN_DIR, RUNNER, export_plan, run_c, run_ort
+from benchmarks.e2e_benchmark import WHOLE_MODELS as MODELS
+from benchmarks.whole_model import ENGINES as C_ENGINES, PLAN_DIR, RUNNER, export_plan, in_own_process, run_c, run_ort
 from src.harness_runner import ROOT, SRC, build
 
 XNN_RUNNER = os.path.join(ROOT, "build", "xnnpack_runner")
@@ -79,7 +78,7 @@ def write_ncnn_model(plan, weights, param_path, bin_path):
         version[tid] += 1
         return blob(tid)
 
-    input_blob, output_blob = None, None
+    input_blob, output_ids = None, []
     with open(plan) as f:
         for line in f:
             p = line.split()
@@ -91,7 +90,7 @@ def write_ncnn_model(plan, weights, param_path, bin_path):
                 input_blob = blob(int(p[1]))
                 layers.append(["Input", [], [input_blob], f"0={w} 1={h} 2={c}", []])
             elif op == "OUTPUT":
-                output_blob = blob(int(p[1]))
+                output_ids.append(int(p[1]))
             elif op == "CONV":
                 out, src, cin, cout, k, s, pad, _m, woff, boff = (int(x) for x in p[1:])
                 n = cout * cin * k * k
@@ -101,10 +100,38 @@ def write_ncnn_model(plan, weights, param_path, bin_path):
                 i = blob(src)
                 layers.append(["Convolution", [i], [next_blob(out)],
                                f"0={cout} 1={k} 3={s} 4={pad} 5={int(boff >= 0)} 6={n}", arrays])
+            elif op == "DWCONV":
+                out, src, c, k, s, pad, woff, boff = (int(x) for x in p[1:])
+                n = c * k * k
+                arrays = [("w", data[woff:woff + n])]
+                if boff >= 0:
+                    arrays.append(("b", data[boff:boff + c]))
+                i = blob(src)
+                layers.append(["ConvolutionDepthWise", [i], [next_blob(out)],
+                               f"0={c} 1={k} 3={s} 4={pad} 5={int(boff >= 0)} 6={n} 7={c}", arrays])
             elif op == "RELU":
                 out, src = int(p[1]), int(p[2])
                 i = blob(src)
                 layers.append(["ReLU", [i], [next_blob(out)], "", []])
+            elif op == "CLIP":
+                out, src = int(p[1]), int(p[2])
+                i = blob(src)
+                layers.append(["Clip", [i], [next_blob(out)], f"0={float(p[3]):.6f} 1={float(p[4]):.6f}", []])
+            elif op == "SILU":
+                out, src = int(p[1]), int(p[2])
+                i = blob(src)
+                layers.append(["Swish", [i], [next_blob(out)], "", []])
+            elif op == "SPLIT":
+                a, b, src = int(p[1]), int(p[2]), int(p[3])
+                i = blob(src)
+                layers.append(["Slice", [i], [next_blob(a), next_blob(b)], "-23300=2,-233,-233 1=0", []])
+            elif op == "CONCAT":
+                out, ins = int(p[1]), [blob(int(x)) for x in p[3:]]
+                layers.append(["Concat", ins, [next_blob(out)], "0=0", []])
+            elif op == "UPSAMPLE":
+                out, src = int(p[1]), int(p[2])
+                i = blob(src)
+                layers.append(["Interp", [i], [next_blob(out)], "0=1 1=2.000000 2=2.000000", []])
             elif op == "MAXPOOL":
                 out, src, k, s, pad = (int(x) for x in p[1:])
                 i = blob(src)
@@ -160,10 +187,10 @@ def write_ncnn_model(plan, weights, param_path, bin_path):
                 if kind == "w":
                     f.write(np.zeros(1, dtype=np.uint32).tobytes())  # flag 0 means raw float32
                 array.tofile(f)
-    return input_blob, output_blob
+    return input_blob, [blob(t) for t in output_ids]
 
 
-def run_ncnn(param_path, bin_path, input_blob, output_blob, input_path, shape, threads, runs, warmup, winograd):
+def run_ncnn(param_path, bin_path, input_blob, output_blobs, input_path, shape, threads, runs, warmup, winograd):
     import ncnn
 
     ncnn.set_cpu_powersave(0)
@@ -185,10 +212,13 @@ def run_ncnn(param_path, bin_path, input_blob, output_blob, input_path, shape, t
     def once():
         ex = net.create_extractor()
         ex.input(input_blob, mat)
-        ret, out = ex.extract(output_blob)
-        if ret != 0:
-            raise RuntimeError(f"ncnn extract failed: {ret}")
-        return out
+        outs = []
+        for name in output_blobs:
+            ret, out = ex.extract(name)
+            if ret != 0:
+                raise RuntimeError(f"ncnn extract failed: {ret}")
+            outs.append(out)
+        return outs
 
     for _ in range(warmup):
         once()
@@ -197,7 +227,10 @@ def run_ncnn(param_path, bin_path, input_blob, output_blob, input_path, shape, t
         t0 = time.perf_counter()
         out = once()
         lats.append((time.perf_counter() - t0) * 1000.0)
-    return lats, np.array(out).ravel().copy()
+    result = np.concatenate([np.array(o).ravel() for o in out])
+    del out
+    net.clear()  # layers hold pool memory, so the net must go before the allocators
+    return lats, result
 
 
 def main():
@@ -226,7 +259,6 @@ def main():
     print(versions, flush=True)
     timestamp = datetime.datetime.now().isoformat()
     models = MODELS if args.models == "all" else args.models.split(",")
-    ctx = mp.get_context("spawn")
     os.makedirs(os.path.dirname(args.raw), exist_ok=True)
     os.makedirs(os.path.dirname(args.summary), exist_ok=True)
     fields = ["timestamp", "git_hash", "versions", "model", "engine", "threads", "run_id", "total_ms",
@@ -262,8 +294,7 @@ def main():
                     results.append((name, lats, err))
                     print(f"{model} T={T} {name} median={st.median(lats):.1f}ms err={err:.2e}", flush=True)
 
-                with ctx.Pool(1) as pool:
-                    ort_lats, reference = pool.apply(run_ort, (onnx_path, input_path, shape, T, args.runs, args.warmup))
+                ort_lats, reference = in_own_process(run_ort, onnx_path, input_path, shape, T, args.runs, args.warmup)
                 record("onnxruntime", ort_lats, reference)
                 for name, variant, batch in C_ENGINES:
                     if name in C_KEEP:
@@ -272,9 +303,8 @@ def main():
                 rows, out = run_xnnpack(plan, weights, input_path, T, args.runs, args.warmup)
                 record("xnnpack", [float(r["total_ms"]) for r in rows], out, rows)
                 for name, winograd in (("ncnn", True), ("ncnn_no_winograd", False)):
-                    with ctx.Pool(1) as pool:
-                        lats, out = pool.apply(run_ncnn, (param_path, bin_path, in_blob, out_blob, input_path, shape, T,
-                                                          args.runs, args.warmup, winograd))
+                    lats, out = in_own_process(run_ncnn, param_path, bin_path, in_blob, out_blob, input_path, shape, T,
+                                               args.runs, args.warmup, winograd)
                     record(name, lats, out)
                 raw_file.flush()
 
