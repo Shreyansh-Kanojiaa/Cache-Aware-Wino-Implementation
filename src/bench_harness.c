@@ -899,6 +899,23 @@ static float* v5_alloc(size_t elems) {
     return p;
 }
 
+/* Each thread keeps its working memory between conv calls, so layers reuse it. The two
+ * buffers are page-aligned and start 2 KB apart, which timed better than 64-byte alignment. */
+/* ponytail: grow-only and never freed, so it holds the largest layer's size until exit. */
+static _Thread_local struct { float* p; size_t cap; } g_v5_scratch[2];
+
+static float* v5_scratch(int slot, size_t elems) {
+    if (g_v5_scratch[slot].cap < elems) {
+        free(g_v5_scratch[slot].p);
+        if (posix_memalign((void**)&g_v5_scratch[slot].p, 4096, (elems + 512) * sizeof(float)) != 0) {
+            fprintf(stderr, "FATAL: v5_batched allocation failed\n");
+            exit(4);
+        }
+        g_v5_scratch[slot].cap = elems;
+    }
+    return g_v5_scratch[slot].p + slot * 512;
+}
+
 void conv2d_v5_batched(
     int m,
     const float* input,
@@ -925,8 +942,8 @@ void conv2d_v5_batched(
     if (N_tiles / T < batch) {
         /* Too few tiles for each thread to have a batch, so all threads share one
          * and split the weight blocks instead of competing for the same ones. */
-        float* V = v5_alloc((size_t)N_tiles * nb * Cin * 4);
-        float* Mb = v5_alloc((size_t)N_tiles * nb * ncb * 32);
+        float* V = v5_scratch(0, (size_t)N_tiles * nb * Cin * 4);
+        float* Mb = v5_scratch(1, (size_t)N_tiles * nb * ncb * 32);
         memset(Mb, 0, (size_t)N_tiles * nb * ncb * 32 * sizeof(float));
         #pragma omp parallel num_threads(T)
         {
@@ -945,16 +962,14 @@ void conv2d_v5_batched(
                 v5_output_tile(m, Mb, output, t, t, Hout, Wout, Cout, Tw);
             }
         }
-        free(V);
-        free(Mb);
         return;
     }
 
     int n_batches = (N_tiles + batch - 1) / batch;
     #pragma omp parallel num_threads(T)
     {
-        float* V = v5_alloc((size_t)batch * nb * Cin * 4);
-        float* Mb = v5_alloc((size_t)batch * nb * ncb * 32);
+        float* V = v5_scratch(0, (size_t)batch * nb * Cin * 4);
+        float* Mb = v5_scratch(1, (size_t)batch * nb * ncb * 32);
 
         #pragma omp for schedule(dynamic)
         for (int b = 0; b < n_batches; b++) {
@@ -973,8 +988,6 @@ void conv2d_v5_batched(
                 v5_output_tile(m, Mb, output, i, t0 + i, Hout, Wout, Cout, Tw);
             }
         }
-        free(V);
-        free(Mb);
     }
 }
 
