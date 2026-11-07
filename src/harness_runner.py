@@ -36,7 +36,7 @@ def conv_output_size(size, stride=1, padding=1):
 
 
 def measure(variant, m, threads, h_out, w_out, c_in, c_out, runs, warmup,
-            board="rpi4", cell_id="cell", raw_path=None, stride=1):
+            board="rpi4", cell_id="cell", raw_path=None, stride=1, batch=None):
     """Run one cell and return its latencies (ms). h_out/w_out are output sizes;
     the harness does a valid conv, so its input is sized to produce exactly those."""
     build()
@@ -48,7 +48,8 @@ def measure(variant, m, threads, h_out, w_out, c_in, c_out, runs, warmup,
                         "--T", str(threads), "--stride", str(stride),
                         "--H", str((h_out - 1) * stride + 3), "--W", str((w_out - 1) * stride + 3),
                         "--Cin", str(c_in), "--Cout", str(c_out), "--warmup", str(warmup),
-                        "--runs", str(runs), "--out", tmp.name], check=True)
+                        "--runs", str(runs), "--out", tmp.name]
+                       + (["--batch", str(batch)] if batch else []), check=True)
         rows = list(csv.DictReader(tmp, fieldnames=FIELDS))
 
     if len(rows) != runs or any(r["executed_path"] != variant for r in rows):
