@@ -12,6 +12,7 @@
  * 6. v3_cin_blocked: Additive optimization 2 (Cin cache-blocking sized to L2 share)
  * 7. v4_pretransformed_packed: Additive optimization 3 (Pre-transformed, packed 64B-aligned weights)
  * 8. v5_batched: Per-bin packed weights, register-blocked multiply, tile batches over cache blocks
+ * 11. v6_freq: Tile batches with one frequency at a time, reusing each weight across 4 tiles
  * 9. direct_packed: Packed direct convolution with real stride and any square kernel
  *
  * Strict Compliance:
@@ -902,12 +903,12 @@ static float* v5_alloc(size_t elems) {
 /* Each thread keeps its working memory between conv calls, so layers reuse it. The two
  * buffers are page-aligned and start 2 KB apart, which timed better than 64-byte alignment. */
 /* ponytail: grow-only and never freed, so it holds the largest layer's size until exit. */
-static _Thread_local struct { float* p; size_t cap; } g_v5_scratch[2];
+static _Thread_local struct { float* p; size_t cap; } g_v5_scratch[4];
 
 static float* v5_scratch(int slot, size_t elems) {
     if (g_v5_scratch[slot].cap < elems) {
         free(g_v5_scratch[slot].p);
-        if (posix_memalign((void**)&g_v5_scratch[slot].p, 4096, (elems + 512) * sizeof(float)) != 0) {
+        if (posix_memalign((void**)&g_v5_scratch[slot].p, 4096, (elems + 1536) * sizeof(float)) != 0) {
             fprintf(stderr, "FATAL: v5_batched allocation failed\n");
             exit(4);
         }
@@ -1194,6 +1195,183 @@ void conv2d_direct_packed(
 }
 
 /* -------------------------------------------------------------------------
+ * 11. v6_freq: Winograd Multiply One Frequency at a Time
+ *
+ * v5 multiplies 4 frequencies of one tile, so every step loads 8 registers of
+ * weights for 32 multiply-adds. Here each frequency is its own matrix product,
+ * outputs = weights x inputs, with 4 tiles in a register, so dp_kernel gets the same
+ * 32 from 2 registers of weights.
+ *
+ * Layouts: U_p[freq][co_block][ci][co within block], V[group][freq][ci][tile within
+ * group], Mb[group][freq][co_block][32]. Batches round up to a multiple of 4 tiles,
+ * so this has no strict one-tile mode: use v5 for that.
+ * ------------------------------------------------------------------------- */
+static float* v6_pack_weights(int m, const float* U, int Cin, int Cout) {
+    int alpha2 = (m + 2) * (m + 2);
+    int ncb = (Cout + 7) / 8;
+    size_t total = (size_t)alpha2 * ncb * Cin * 8;
+    float* U_p = v5_alloc(total);
+    memset(U_p, 0, total * sizeof(float));
+    for (int k = 0; k < alpha2; k++) {
+        for (int co = 0; co < Cout; co++) {
+            for (int ci = 0; ci < Cin; ci++) {
+                U_p[(((size_t)k * ncb + co / 8) * Cin + ci) * 8 + co % 8] = U[((size_t)co * Cin + ci) * alpha2 + k];
+            }
+        }
+    }
+    return U_p;
+}
+
+static inline void v6_input_tile(int m, const float* input, float* V, int slot, int t,
+                                 int H, int W, int Cin, int Tw) {
+    int alpha = m + 2;
+    int alpha2 = alpha * alpha;
+    int h_start = (t / Tw) * m;
+    int w_start = (t % Tw) * m;
+    size_t group = (size_t)(slot / 4) * alpha2;
+    int lane = slot % 4;
+    /* Transform first, then copy one frequency at a time, so writes stay sequential
+     * however large the batch is. */
+    float* tmp = v5_scratch(2, (size_t)Cin * alpha2);
+    for (int ci = 0; ci < Cin; ci++) {
+        float d[64];
+        for (int r = 0; r < alpha; r++) {
+            for (int c = 0; c < alpha; c++) {
+                int ih = h_start + r;
+                int iw = w_start + c;
+                d[r * alpha + c] = (ih < H && iw < W) ? input[(size_t)ci * H * W + ih * W + iw] : 0.0f;
+            }
+        }
+        transform_input_tile(m, d, tmp + (size_t)ci * alpha2);
+    }
+    for (int k = 0; k < alpha2; k++) {
+        float* dst = V + (group + k) * Cin * 4 + lane;
+        for (int ci = 0; ci < Cin; ci++) {
+            dst[ci * 4] = tmp[(size_t)ci * alpha2 + k];
+        }
+    }
+}
+
+static inline void v6_multiply(const float* U_p, const float* V, float* Mb, int k, int cb,
+                               int ng, int alpha2, int ncb, int Cin) {
+    for (int ci0 = 0; ci0 < Cin; ci0 += g_v5_kc) {
+        int nci = (ci0 + g_v5_kc <= Cin) ? g_v5_kc : Cin - ci0;
+        const float* U_blk = U_p + (((size_t)k * ncb + cb) * Cin + ci0) * 8;
+        for (int g = 0; g < ng; g++) {
+            size_t gk = (size_t)g * alpha2 + k;
+            dp_kernel(U_blk, V + (gk * Cin + ci0) * 4, Mb + (gk * ncb + cb) * 32, nci);
+        }
+    }
+}
+
+static inline void v6_output_tile(int m, const float* Mb, float* output, int slot, int t,
+                                  int Hout, int Wout, int Cout, int Tw) {
+    int alpha2 = (m + 2) * (m + 2);
+    int ncb = (Cout + 7) / 8;
+    int h_start = (t / Tw) * m;
+    int w_start = (t % Tw) * m;
+    size_t group = (size_t)(slot / 4) * alpha2;
+    int lane = slot % 4;
+    float* tmp = v5_scratch(3, (size_t)Cout * alpha2);
+    for (int k = 0; k < alpha2; k++) {
+        const float* src = Mb + (group + k) * ncb * 32 + lane * 8;
+        for (int co = 0; co < Cout; co++) {
+            tmp[(size_t)co * alpha2 + k] = src[(co / 8) * 32 + co % 8];
+        }
+    }
+    for (int co = 0; co < Cout; co++) {
+        float y[36];
+        transform_output_tile(m, tmp + (size_t)co * alpha2, y);
+        for (int r = 0; r < m; r++) {
+            for (int c = 0; c < m; c++) {
+                int oh = h_start + r;
+                int ow = w_start + c;
+                if (oh < Hout && ow < Wout) {
+                    output[(size_t)co * Hout * Wout + oh * Wout + ow] = y[r * m + c];
+                }
+            }
+        }
+    }
+}
+
+void conv2d_v6_freq(
+    int m,
+    const float* input,
+    const float* U_p,
+    float* output,
+    int H, int W,
+    int Cin, int Cout,
+    int T,
+    const char** executed_path)
+{
+    *executed_path = "v6_freq";
+    int alpha2 = (m + 2) * (m + 2);
+    int ncb = (Cout + 7) / 8;
+    int Hout = H - 2;
+    int Wout = W - 2;
+    int Th = (Hout + m - 1) / m;
+    int Tw = (Wout + m - 1) / m;
+    int N_tiles = Th * Tw;
+    size_t table_bytes = (size_t)Cin * Cout * alpha2 * sizeof(float);
+    /* ponytail: tuned on one RPi4 at T=1 and T=4; pass --batch for other boards. */
+    int batch = g_v5_batch > 0 ? (g_v5_batch + 3) / 4 * 4 : (table_bytes > V5_L2_BYTES ? 16 : 8);
+
+    if (N_tiles / T < batch) {
+        /* Too few tiles for each thread to have a batch, so all threads share one
+         * and split the frequencies and output channels instead. */
+        int ng = (N_tiles + 3) / 4;
+        float* V = v5_scratch(0, (size_t)ng * alpha2 * Cin * 4);
+        float* Mb = v5_scratch(1, (size_t)ng * alpha2 * ncb * 32);
+        memset(Mb, 0, (size_t)ng * alpha2 * ncb * 32 * sizeof(float));
+        #pragma omp parallel num_threads(T)
+        {
+            #pragma omp for schedule(dynamic)
+            for (int t = 0; t < N_tiles; t++) {
+                v6_input_tile(m, input, V, t, t, H, W, Cin, Tw);
+            }
+            #pragma omp for collapse(2) schedule(dynamic)
+            for (int k = 0; k < alpha2; k++) {
+                for (int cb = 0; cb < ncb; cb++) {
+                    v6_multiply(U_p, V, Mb, k, cb, ng, alpha2, ncb, Cin);
+                }
+            }
+            #pragma omp for schedule(dynamic)
+            for (int t = 0; t < N_tiles; t++) {
+                v6_output_tile(m, Mb, output, t, t, Hout, Wout, Cout, Tw);
+            }
+        }
+        return;
+    }
+
+    int n_batches = (N_tiles + batch - 1) / batch;
+    #pragma omp parallel num_threads(T)
+    {
+        int ng_max = batch / 4;
+        float* V = v5_scratch(0, (size_t)ng_max * alpha2 * Cin * 4);
+        float* Mb = v5_scratch(1, (size_t)ng_max * alpha2 * ncb * 32);
+
+        #pragma omp for schedule(dynamic)
+        for (int b = 0; b < n_batches; b++) {
+            int t0 = b * batch;
+            int nt = (t0 + batch <= N_tiles) ? batch : N_tiles - t0;
+            int ng = (nt + 3) / 4;
+            for (int i = 0; i < nt; i++) {
+                v6_input_tile(m, input, V, i, t0 + i, H, W, Cin, Tw);
+            }
+            memset(Mb, 0, (size_t)ng * alpha2 * ncb * 32 * sizeof(float));
+            for (int k = 0; k < alpha2; k++) {
+                for (int cb = 0; cb < ncb; cb++) {
+                    v6_multiply(U_p, V, Mb, k, cb, ng, alpha2, ncb, Cin);
+                }
+            }
+            for (int i = 0; i < nt; i++) {
+                v6_output_tile(m, Mb, output, i, t0 + i, Hout, Wout, Cout, Tw);
+            }
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------
  * 10. depthwise: One k x k filter per channel, with NEON for 3x3 at stride 1 and 2
  * ------------------------------------------------------------------------- */
 __attribute__((always_inline))
@@ -1310,7 +1488,7 @@ int run_harness_selftest(void) {
     }
 
     /* Test all variants across m in {2, 4, 6} */
-    const char* variants[] = {"neon_direct", "unfused", "fused", "v2_regblocked", "v3_cin_blocked", "v4_pretransformed_packed", "v5_batched"};
+    const char* variants[] = {"neon_direct", "unfused", "fused", "v2_regblocked", "v3_cin_blocked", "v4_pretransformed_packed", "v5_batched", "v6_freq"};
     int n_var = sizeof(variants) / sizeof(variants[0]);
 
     for (int ti = 0; ti < 2; ti++) {
@@ -1342,6 +1520,10 @@ int run_harness_selftest(void) {
                 float* U_p = v5_pack_weights(m, U, Cin, Cout);
                 conv2d_v5_batched(m, in, U_p, out, H, W, Cin, Cout, T, &path);
                 free(U_p);
+            } else if (strcmp(req, "v6_freq") == 0) {
+                float* U_p = v6_pack_weights(m, U, Cin, Cout);
+                conv2d_v6_freq(m, in, U_p, out, H, W, Cin, Cout, T, &path);
+                free(U_p);
             }
             free(U);
         }
@@ -1365,7 +1547,7 @@ int run_harness_selftest(void) {
     }
     }
 
-    /* v5_batched edge cases: Cout padding, partial batches, kc smaller than Cin */
+    /* v5_batched and v6_freq edge cases: Cout padding, partial batches, kc smaller than Cin */
     {
         int h2 = 14, w2 = 14, ci2 = 5, co2 = 9;
         int ho2 = h2 - 2, wo2 = w2 - 2;
@@ -1385,28 +1567,31 @@ int run_harness_selftest(void) {
             float* U = (float*)malloc((size_t)co2 * ci2 * alpha * alpha * sizeof(float));
             transform_weights(m, ci2, co2, w_2, U);
             float* U_p = v5_pack_weights(m, U, ci2, co2);
-            for (int ti = 0; ti < 2; ti++) for (int bi = 0; bi < 4; bi++) for (int ki = 0; ki < 3; ki++) {
+            float* U_p6 = v6_pack_weights(m, U, ci2, co2);
+            for (int vi = 0; vi < 2; vi++) for (int ti = 0; ti < 2; ti++) for (int bi = 0; bi < 4; bi++) for (int ki = 0; ki < 3; ki++) {
                 g_v5_batch = batches[bi];
                 g_v5_kc = kcs[ki];
                 memset(out2, 0, o2 * sizeof(float));
-                conv2d_v5_batched(m, in2, U_p, out2, h2, w2, ci2, co2, test_T_vals[ti], &path);
+                if (vi == 0) conv2d_v5_batched(m, in2, U_p, out2, h2, w2, ci2, co2, test_T_vals[ti], &path);
+                else conv2d_v6_freq(m, in2, U_p6, out2, h2, w2, ci2, co2, test_T_vals[ti], &path);
                 float max_err = 0.0f;
                 for (size_t i = 0; i < o2; i++) {
                     float err = fabsf(ref2[i] - out2[i]);
                     if (err > max_err) max_err = err;
                 }
                 if (max_err > 1e-3f) {
-                    fprintf(stderr, "FATAL: v5_batched m=%d T=%d batch=%d kc=%d (max_err=%.4e)\n",
-                            m, test_T_vals[ti], g_v5_batch, g_v5_kc, max_err);
+                    fprintf(stderr, "FATAL: %s m=%d T=%d batch=%d kc=%d (max_err=%.4e)\n",
+                            path, m, test_T_vals[ti], g_v5_batch, g_v5_kc, max_err);
                     return 1;
                 }
             }
             free(U);
             free(U_p);
+            free(U_p6);
         }
         g_v5_batch = saved_batch;
         g_v5_kc = saved_kc;
-        printf("  v5_batched edge cases OK (padding, partial batches, kc < Cin)\n");
+        printf("  v5_batched and v6_freq edge cases OK (padding, partial batches, kc < Cin)\n");
         free(in2); free(w_2); free(ref2); free(out2);
     }
 
@@ -1577,8 +1762,8 @@ int main(int argc, char** argv) {
     if (strcmp(variant, "naive_direct") != 0 && strcmp(variant, "neon_direct") != 0 && !W_p) {
         U = (float*)malloc((size_t)Cout * Cin * alpha * alpha * sizeof(float));
         transform_weights(m, Cin, Cout, w, U);
-        if (strcmp(variant, "v5_batched") == 0) {
-            float* U_p = v5_pack_weights(m, U, Cin, Cout);
+        if (strcmp(variant, "v5_batched") == 0 || strcmp(variant, "v6_freq") == 0) {
+            float* U_p = strcmp(variant, "v6_freq") == 0 ? v6_pack_weights(m, U, Cin, Cout) : v5_pack_weights(m, U, Cin, Cout);
             free(U);
             U = U_p;
         }
@@ -1604,6 +1789,8 @@ int main(int argc, char** argv) {
             conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "v5_batched") == 0) {
             conv2d_v5_batched(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
+        } else if (strcmp(variant, "v6_freq") == 0) {
+            conv2d_v6_freq(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "direct_packed") == 0) {
             conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, 3, g_stride, T, &exec_path);
         }
@@ -1645,6 +1832,8 @@ int main(int argc, char** argv) {
             conv2d_v4_pretransformed_packed(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "v5_batched") == 0) {
             conv2d_v5_batched(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
+        } else if (strcmp(variant, "v6_freq") == 0) {
+            conv2d_v6_freq(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "direct_packed") == 0) {
             conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, 3, g_stride, T, &exec_path);
         }

@@ -37,6 +37,7 @@ static Tensor g_t[MAX_TENSORS];
 static Op g_ops[MAX_OPS];
 static int g_nops;
 static double g_cat[N_CATS];
+static int g_v6;
 #define MAX_OUTPUTS 8
 static int g_outs[MAX_OUTPUTS];
 static int g_n_outs;
@@ -115,7 +116,8 @@ static void run_conv(Op* o, int T) {
     if (o->depthwise) {
         conv2d_depthwise(src, o->w, out->d, H, W, o->cin, o->k, o->s, T);
     } else if (o->use_v5) {
-        conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
+        if (g_v6) conv2d_v6_freq(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
+        else conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
     } else {
         conv2d_direct_packed(src, o->pack, out->d, H, W, o->cin, o->cout, o->k, o->s, T, &path);
     }
@@ -268,7 +270,7 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
                 int alpha = o->m + 2;
                 float* U = (float*)malloc((size_t)o->cout * o->cin * alpha * alpha * sizeof(float));
                 transform_weights(o->m, o->cin, o->cout, weights + o->woff, U);
-                o->pack = v5_pack_weights(o->m, U, o->cin, o->cout);
+                o->pack = g_v6 ? v6_pack_weights(o->m, U, o->cin, o->cout) : v5_pack_weights(o->m, U, o->cin, o->cout);
                 free(U);
             } else {
                 o->pack = dp_pack_weights(weights + o->woff, o->cin, o->cout, o->k);
@@ -363,14 +365,16 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--warmup") == 0) warmup = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--runs") == 0) runs = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--batch") == 0) g_v5_batch = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--kc") == 0) g_v5_kc = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
-    if (strcmp(variant, "v5_batched") != 0 && strcmp(variant, "direct_packed") != 0) die("unknown variant");
+    g_v6 = strcmp(variant, "v6_freq") == 0;
+    if (!g_v6 && strcmp(variant, "v5_batched") != 0 && strcmp(variant, "direct_packed") != 0) die("unknown variant");
 
     float* weights = read_floats(weights_path, NULL);
     int in_id = -1;
-    load_plan(plan, weights, strcmp(variant, "v5_batched") == 0, &in_id);
+    load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, &in_id);
     if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
 
     size_t n_in = 0;
