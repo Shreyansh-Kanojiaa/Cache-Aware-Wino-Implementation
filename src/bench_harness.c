@@ -1054,6 +1054,21 @@ static inline void dp_pack_patches(const float* input, float* P, int pix0, int n
                                    int ci0, int nci, int H, int W, int Wout, int k, int s) {
     int ng = (np + 3) / 4;
     int taps = k * k;
+    if (k == 1 && s == 1) {
+        /* A patch is one value and each plane is contiguous, so copy 4 pixels at a time */
+        int full = np / 4;
+        if (ng > full) memset(P + (size_t)full * nci * 4, 0, (size_t)nci * 4 * sizeof(float));
+        for (int ci = 0; ci < nci; ci++) {
+            const float* in = input + (size_t)(ci0 + ci) * H * W + pix0;
+            for (int g = 0; g < full; g++) {
+                *(v4f*)(P + ((size_t)g * nci + ci) * 4) = *(const v4f*)(in + g * 4);
+            }
+            for (int j = full * 4; j < np; j++) {
+                P[((size_t)full * nci + ci) * 4 + j % 4] = in[j];
+            }
+        }
+        return;
+    }
     memset(P, 0, (size_t)ng * nci * taps * 4 * sizeof(float));
     for (int j = 0; j < np; j++) {
         int pix = pix0 + j;
@@ -1072,10 +1087,30 @@ static inline void dp_pack_patches(const float* input, float* P, int pix0, int n
 
 static inline void dp_write_pixels(const float* O, float* output, int pix0, int np,
                                    int ncb, int Cout, int Hout, int Wout) {
+    size_t plane = (size_t)Hout * Wout;
+    int full_px = np / 4 * 4, full_co = Cout / 8 * 8;
+    /* Whole groups: O holds 8 channels per pixel, the output 4 pixels per channel, so transpose */
+    for (int co0 = 0; co0 < full_co; co0 += 8) {
+        for (int j = 0; j < full_px; j += 4) {
+            const float* o = O + ((size_t)(j / 4) * ncb + co0 / 8) * 32;
+            for (int half = 0; half < 2; half++) {
+                v4f a = *(const v4f*)(o + half * 4), b = *(const v4f*)(o + 8 + half * 4);
+                v4f c = *(const v4f*)(o + 16 + half * 4), d = *(const v4f*)(o + 24 + half * 4);
+                v4f t0 = __builtin_shufflevector(a, b, 0, 4, 1, 5), t1 = __builtin_shufflevector(a, b, 2, 6, 3, 7);
+                v4f t2 = __builtin_shufflevector(c, d, 0, 4, 1, 5), t3 = __builtin_shufflevector(c, d, 2, 6, 3, 7);
+                float* y = output + (size_t)(co0 + half * 4) * plane + pix0 + j;
+                *(v4f*)(y) = __builtin_shufflevector(t0, t2, 0, 1, 4, 5);
+                *(v4f*)(y + plane) = __builtin_shufflevector(t0, t2, 2, 3, 6, 7);
+                *(v4f*)(y + 2 * plane) = __builtin_shufflevector(t1, t3, 0, 1, 4, 5);
+                *(v4f*)(y + 3 * plane) = __builtin_shufflevector(t1, t3, 2, 3, 6, 7);
+            }
+        }
+    }
+    /* Whatever is left: channels past the last full block, and pixels past the last full group */
     for (int j = 0; j < np; j++) {
         const float* o = O + (size_t)(j / 4) * ncb * 32 + (j % 4) * 8;
-        for (int co = 0; co < Cout; co++) {
-            output[(size_t)co * Hout * Wout + pix0 + j] = o[(co / 8) * 32 + co % 8];
+        for (int co = j < full_px ? full_co : 0; co < Cout; co++) {
+            output[(size_t)co * plane + pix0 + j] = o[(co / 8) * 32 + co % 8];
         }
     }
 }
