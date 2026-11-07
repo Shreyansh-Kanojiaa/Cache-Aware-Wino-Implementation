@@ -2,8 +2,8 @@
 """Time single 3x3 conv layers in ONNX Runtime and the C kernels, side by side.
 
 This is the like-for-like comparison: the same layer shape and thread count, with
-no other model ops involved. ONNX Runtime gets its own process each time, because
-its worker threads slowed the C kernels timed straight after it.
+no other model ops involved. ONNX Runtime gets its own process each time, so its
+worker threads can't overlap the C kernels' timings.
 
 Writes raw_logs/harness/single_layer_vs_ort.csv and
 summary/harness/single_layer_vs_ort.csv.
