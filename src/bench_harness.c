@@ -1070,6 +1070,38 @@ static inline void dp_pack_patches(const float* input, float* P, int pix0, int n
         }
         return;
     }
+#if HAS_ARM_NEON
+    if (k == 3 && s == 2) {
+        /* 4 neighbouring pixels read every other value of a row, so one deinterleaving load
+         * gives taps 0 and 1 for all four, and a second one, 2 values on, gives tap 2. */
+        for (int g = 0; g < ng; g++) {
+            int pix = pix0 + g * 4, oh = pix / Wout, ow = pix % Wout, n = np - g * 4 < 4 ? np - g * 4 : 4;
+            float* gp = P + (size_t)g * nci * 9 * 4;
+            if (n == 4 && ow + 3 < Wout && 2 * ow + 10 <= W) {
+                for (int ci = 0; ci < nci; ci++) {
+                    const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oh * 2) * W + ow * 2;
+                    for (int kh = 0; kh < 3; kh++) {
+                        float32x4x2_t a = vld2q_f32(in + kh * W), c = vld2q_f32(in + kh * W + 2);
+                        float* d = gp + (size_t)(ci * 9 + kh * 3) * 4;
+                        vst1q_f32(d, a.val[0]);
+                        vst1q_f32(d + 4, a.val[1]);
+                        vst1q_f32(d + 8, c.val[0]);
+                    }
+                }
+                continue;
+            }
+            memset(gp, 0, (size_t)nci * 9 * 4 * sizeof(float));   /* row edges and partial groups */
+            for (int j = 0; j < n; j++) {
+                int pj = pix + j, oy = pj / Wout, ox = pj % Wout;
+                for (int ci = 0; ci < nci; ci++) {
+                    const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oy * 2) * W + ox * 2;
+                    for (int t = 0; t < 9; t++) gp[(size_t)(ci * 9 + t) * 4 + j] = in[(t / 3) * W + t % 3];
+                }
+            }
+        }
+        return;
+    }
+#endif
     memset(P, 0, (size_t)ng * nci * taps * 4 * sizeof(float));
     for (int j = 0; j < np; j++) {
         int pix = pix0 + j;
