@@ -188,12 +188,13 @@ def export_plan(model_name):
                 else:
                     out = new_tensor(name, shapes[src])
                 lines.append(f"ADD {out} {ids[src]} {ids[b]}")
-            elif op == "ReduceMean":
-                assert {int(x) % 4 for x in inits[node.input[1]].tolist()} == {2, 3}
+            elif op in ("ReduceMean", "GlobalAveragePool"):
+                if op == "ReduceMean":
+                    assert {int(x) % 4 for x in inits[node.input[1]].tolist()} == {2, 3}
                 ci = shapes[src][0]
                 out = new_tensor(name, (ci, 1, 1))
                 lines.append(f"GAP {out} {ids[src]}")
-            elif op == "Reshape":
+            elif op in ("Reshape", "Flatten"):
                 ci, hi, wi = shapes[src]
                 reuse(name, src, (ci * hi * wi, 1, 1))
             elif op == "Gemm":

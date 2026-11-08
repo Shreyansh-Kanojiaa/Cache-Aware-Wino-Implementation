@@ -1,0 +1,206 @@
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_conv_c16_h96 T=4 onnxruntime=8.93 ours_wino=11.70 ours_direct=10.78 xnnpack=4.41 ncnn=15.84 ncnn_fp32=15.89
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_conv_c16_h96 T=1 onnxruntime=24.26 ours_wino=39.24 ours_direct=38.40 xnnpack=16.85 ncnn=18.62 ncnn_fp32=19.83
+activation memory: 3.5 MB (recycle=1)
+activation memory: 3.5 MB (recycle=1)
+probe_conv_c32_h96 T=4 onnxruntime=26.19 ours_wino=19.14 ours_direct=31.27 xnnpack=19.87 ncnn=32.92 ncnn_fp32=32.63
+activation memory: 3.5 MB (recycle=1)
+activation memory: 3.5 MB (recycle=1)
+probe_conv_c32_h96 T=1 onnxruntime=87.25 ours_wino=44.14 ours_direct=107.03 xnnpack=64.11 ncnn=47.05 ncnn_fp32=48.59
+activation memory: 5.3 MB (recycle=1)
+activation memory: 5.3 MB (recycle=1)
+probe_conv_c48_h96 T=4 onnxruntime=56.28 ours_wino=41.19 ours_direct=58.35 xnnpack=48.57 ncnn=54.42 ncnn_fp32=53.19
+activation memory: 5.3 MB (recycle=1)
+activation memory: 5.3 MB (recycle=1)
+probe_conv_c48_h96 T=1 onnxruntime=168.33 ours_wino=83.52 ours_direct=206.61 xnnpack=137.70 ncnn=74.86 ncnn_fp32=79.75
+activation memory: 7.1 MB (recycle=1)
+activation memory: 7.1 MB (recycle=1)
+probe_conv_c64_h96 T=4 onnxruntime=94.57 ours_wino=75.88 ours_direct=93.01 xnnpack=93.40 ncnn=71.87 ncnn_fp32=72.55
+activation memory: 7.1 MB (recycle=1)
+activation memory: 7.1 MB (recycle=1)
+probe_conv_c64_h96 T=1 onnxruntime=295.50 ours_wino=133.24 ours_direct=338.79 xnnpack=242.10 ncnn=113.89 ncnn_fp32=112.04
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_conv_c32_h48 T=4 onnxruntime=6.94 ours_wino=4.41 ours_direct=7.45 xnnpack=4.68 ncnn=6.72 ncnn_fp32=6.94
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_conv_c32_h48 T=1 onnxruntime=20.55 ours_wino=11.17 ours_direct=26.43 xnnpack=15.96 ncnn=10.07 ncnn_fp32=9.97
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_conv_c64_h48 T=4 onnxruntime=23.32 ours_wino=20.11 ours_direct=23.45 xnnpack=23.84 ncnn=17.54 ncnn_fp32=17.56
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_conv_c64_h48 T=1 onnxruntime=72.37 ours_wino=35.18 ours_direct=83.97 xnnpack=60.20 ncnn=26.54 ncnn_fp32=26.80
+activation memory: 2.7 MB (recycle=1)
+activation memory: 2.7 MB (recycle=1)
+probe_conv_c96_h48 T=4 onnxruntime=54.49 ours_wino=37.97 ours_direct=48.26 xnnpack=55.62 ncnn=30.07 ncnn_fp32=29.33
+activation memory: 2.7 MB (recycle=1)
+activation memory: 2.7 MB (recycle=1)
+probe_conv_c96_h48 T=1 onnxruntime=156.49 ours_wino=68.65 ours_direct=175.37 xnnpack=131.57 ncnn=49.21 ncnn_fp32=49.36
+activation memory: 3.5 MB (recycle=1)
+activation memory: 3.5 MB (recycle=1)
+probe_conv_c128_h48 T=4 onnxruntime=87.63 ours_wino=60.00 ours_direct=82.18 xnnpack=100.01 ncnn=44.42 ncnn_fp32=44.07
+activation memory: 3.5 MB (recycle=1)
+activation memory: 3.5 MB (recycle=1)
+probe_conv_c128_h48 T=1 onnxruntime=292.56 ours_wino=125.56 ours_direct=303.64 xnnpack=245.81 ncnn=79.55 ncnn_fp32=80.08
+activation memory: 0.4 MB (recycle=1)
+activation memory: 0.4 MB (recycle=1)
+probe_conv_c64_h24 T=4 onnxruntime=6.22 ours_wino=6.18 ours_direct=5.84 xnnpack=5.89 ncnn=4.74 ncnn_fp32=4.67
+activation memory: 0.4 MB (recycle=1)
+activation memory: 0.4 MB (recycle=1)
+probe_conv_c64_h24 T=1 onnxruntime=19.91 ours_wino=10.33 ours_direct=21.02 xnnpack=15.08 ncnn=5.93 ncnn_fp32=5.92
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_conv_c128_h24 T=4 onnxruntime=21.63 ours_wino=13.68 ours_direct=20.35 xnnpack=24.22 ncnn=14.11 ncnn_fp32=14.03
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_conv_c128_h24 T=1 onnxruntime=72.12 ours_wino=34.43 ours_direct=76.20 xnnpack=60.03 ncnn=18.49 ncnn_fp32=18.40
+activation memory: 1.3 MB (recycle=1)
+activation memory: 1.3 MB (recycle=1)
+probe_conv_c192_h24 T=4 onnxruntime=47.73 ours_wino=25.02 ours_direct=44.27 xnnpack=94.37 ncnn=24.72 ncnn_fp32=24.70
+activation memory: 1.3 MB (recycle=1)
+activation memory: 1.3 MB (recycle=1)
+probe_conv_c192_h24 T=1 onnxruntime=159.14 ours_wino=67.91 ours_direct=166.05 xnnpack=143.80 ncnn=44.85 ncnn_fp32=45.12
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_conv_c256_h24 T=4 onnxruntime=92.62 ours_wino=44.45 ours_direct=74.85 xnnpack=274.98 ncnn=38.94 ncnn_fp32=38.69
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_conv_c256_h24 T=1 onnxruntime=278.46 ours_wino=127.84 ours_direct=286.82 xnnpack=264.59 ncnn=75.81 ncnn_fp32=76.71
+activation memory: 0.2 MB (recycle=1)
+activation memory: 0.2 MB (recycle=1)
+probe_conv_c128_h12 T=4 onnxruntime=6.81 ours_wino=6.29 ours_direct=6.77 xnnpack=6.28 ncnn=6.72 ncnn_fp32=6.71
+activation memory: 0.2 MB (recycle=1)
+activation memory: 0.2 MB (recycle=1)
+probe_conv_c128_h12 T=1 onnxruntime=19.74 ours_wino=10.33 ours_direct=18.98 xnnpack=15.64 ncnn=5.96 ncnn_fp32=5.95
+activation memory: 0.4 MB (recycle=1)
+activation memory: 0.4 MB (recycle=1)
+probe_conv_c256_h12 T=4 onnxruntime=28.37 ours_wino=18.76 ours_direct=24.69 xnnpack=67.77 ncnn=18.13 ncnn_fp32=17.85
+activation memory: 0.4 MB (recycle=1)
+activation memory: 0.4 MB (recycle=1)
+probe_conv_c256_h12 T=1 onnxruntime=74.00 ours_wino=39.41 ours_direct=70.96 xnnpack=71.13 ncnn=20.06 ncnn_fp32=20.11
+activation memory: 0.7 MB (recycle=1)
+activation memory: 0.7 MB (recycle=1)
+probe_conv_c384_h12 T=4 onnxruntime=54.63 ours_wino=35.20 ours_direct=54.35 xnnpack=196.30 ncnn=37.28 ncnn_fp32=37.85
+activation memory: 0.7 MB (recycle=1)
+activation memory: 0.7 MB (recycle=1)
+probe_conv_c384_h12 T=1 onnxruntime=157.75 ours_wino=68.75 ours_direct=155.85 xnnpack=156.28 ncnn=43.27 ncnn_fp32=43.21
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_conv_c512_h12 T=4 onnxruntime=100.44 ours_wino=55.97 ours_direct=94.11 xnnpack=359.92 ncnn=64.23 ncnn_fp32=64.63
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_conv_c512_h12 T=1 onnxruntime=283.74 ours_wino=110.55 ours_direct=274.85 xnnpack=278.70 ncnn=94.42 ncnn_fp32=95.12
+activation memory: 2.4 MB (recycle=1)
+activation memory: 2.4 MB (recycle=1)
+probe_conv_c64_h56 T=4 onnxruntime=32.53 ours_wino=27.86 ours_direct=32.36 xnnpack=30.77 ncnn=25.55 ncnn_fp32=25.12
+activation memory: 2.4 MB (recycle=1)
+activation memory: 2.4 MB (recycle=1)
+probe_conv_c64_h56 T=1 onnxruntime=97.21 ours_wino=49.74 ours_direct=114.04 xnnpack=81.35 ncnn=41.04 ncnn_fp32=41.24
+activation memory: 1.2 MB (recycle=1)
+activation memory: 1.2 MB (recycle=1)
+probe_conv_c128_h28 T=4 onnxruntime=30.08 ours_wino=18.56 ours_direct=29.85 xnnpack=33.46 ncnn=18.97 ncnn_fp32=18.89
+activation memory: 1.2 MB (recycle=1)
+activation memory: 1.2 MB (recycle=1)
+probe_conv_c128_h28 T=1 onnxruntime=98.38 ours_wino=45.17 ours_direct=103.03 xnnpack=81.76 ncnn=31.11 ncnn_fp32=31.29
+activation memory: 0.6 MB (recycle=1)
+activation memory: 0.6 MB (recycle=1)
+probe_conv_c256_h14 T=4 onnxruntime=36.45 ours_wino=21.67 ours_direct=28.54 xnnpack=89.68 ncnn=22.57 ncnn_fp32=22.25
+activation memory: 0.6 MB (recycle=1)
+activation memory: 0.6 MB (recycle=1)
+probe_conv_c256_h14 T=1 onnxruntime=114.21 ours_wino=49.91 ours_direct=98.49 xnnpack=88.46 ncnn=31.89 ncnn_fp32=31.77
+activation memory: 0.3 MB (recycle=1)
+activation memory: 0.3 MB (recycle=1)
+probe_conv_c512_h7 T=4 onnxruntime=40.89 ours_wino=44.85 ours_direct=46.27 xnnpack=123.15 ncnn=50.56 ncnn_fp32=51.59
+activation memory: 0.3 MB (recycle=1)
+activation memory: 0.3 MB (recycle=1)
+probe_conv_c512_h7 T=1 onnxruntime=116.61 ours_wino=46.84 ours_direct=103.20 xnnpack=102.42 ncnn=39.24 ncnn_fp32=39.77
+activation memory: 1.2 MB (recycle=1)
+activation memory: 1.2 MB (recycle=1)
+probe_conv_c512_h14 T=4 onnxruntime=142.45 ours_wino=64.46 ours_direct=106.25 xnnpack=496.10 ncnn=79.41 ncnn_fp32=78.04
+activation memory: 1.2 MB (recycle=1)
+activation memory: 1.2 MB (recycle=1)
+probe_conv_c512_h14 T=1 onnxruntime=414.29 ours_wino=162.83 ours_direct=374.27 xnnpack=371.81 ncnn=136.19 ncnn_fp32=135.94
+activation memory: 2.4 MB (recycle=1)
+activation memory: 2.4 MB (recycle=1)
+probe_conv_c256_h28 T=4 onnxruntime=120.97 ours_wino=62.23 ours_direct=109.38 xnnpack=369.62 ncnn=50.86 ncnn_fp32=51.15
+activation memory: 2.4 MB (recycle=1)
+activation memory: 2.4 MB (recycle=1)
+probe_conv_c256_h28 T=1 onnxruntime=375.32 ours_wino=166.81 ours_direct=392.53 xnnpack=358.67 ncnn=104.50 ncnn_fp32=104.92
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_s2_c32_h96 T=4 onnxruntime=3.73 ours_wino=3.58 ours_direct=3.60 xnnpack=3.11 ncnn=5.61 ncnn_fp32=5.59
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_s2_c32_h96 T=1 onnxruntime=10.40 ours_wino=10.15 ours_direct=9.96 xnnpack=8.36 ncnn=10.45 ncnn_fp32=10.56
+activation memory: 2.1 MB (recycle=1)
+activation memory: 2.1 MB (recycle=1)
+probe_pool_c32_h96 T=4 onnxruntime=3.99 ours_wino=3.00 ours_direct=3.69 xnnpack=3.20 ncnn=4.66 ncnn_fp32=4.57
+activation memory: 2.1 MB (recycle=1)
+activation memory: 2.1 MB (recycle=1)
+probe_pool_c32_h96 T=1 onnxruntime=11.62 ours_wino=6.83 ours_direct=12.98 xnnpack=8.57 ncnn=5.48 ncnn_fp32=5.50
+activation memory: 3.5 MB (recycle=1)
+activation memory: 3.5 MB (recycle=1)
+probe_s2_c64_h96 T=4 onnxruntime=13.92 ours_wino=11.34 ours_direct=11.24 xnnpack=11.92 ncnn=16.06 ncnn_fp32=15.40
+activation memory: 3.5 MB (recycle=1)
+activation memory: 3.5 MB (recycle=1)
+probe_s2_c64_h96 T=1 onnxruntime=37.28 ours_wino=35.74 ours_direct=35.60 xnnpack=31.07 ncnn=34.81 ncnn_fp32=34.47
+activation memory: 4.1 MB (recycle=1)
+activation memory: 4.1 MB (recycle=1)
+probe_pool_c64_h96 T=4 onnxruntime=12.43 ours_wino=10.10 ours_direct=11.19 xnnpack=12.20 ncnn=10.73 ncnn_fp32=10.77
+activation memory: 4.1 MB (recycle=1)
+activation memory: 4.1 MB (recycle=1)
+probe_pool_c64_h96 T=1 onnxruntime=36.91 ours_wino=21.11 ours_direct=41.54 xnnpack=30.62 ncnn=13.93 ncnn_fp32=13.94
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_s2_c64_h48 T=4 onnxruntime=3.32 ours_wino=2.97 ours_direct=2.91 xnnpack=3.09 ncnn=3.82 ncnn_fp32=3.73
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_s2_c64_h48 T=1 onnxruntime=9.67 ours_wino=8.91 ours_direct=8.86 xnnpack=7.71 ncnn=8.58 ncnn_fp32=8.62
+activation memory: 1.0 MB (recycle=1)
+activation memory: 1.0 MB (recycle=1)
+probe_pool_c64_h48 T=4 onnxruntime=3.42 ours_wino=2.50 ours_direct=2.97 xnnpack=3.06 ncnn=2.67 ncnn_fp32=2.66
+activation memory: 1.0 MB (recycle=1)
+activation memory: 1.0 MB (recycle=1)
+probe_pool_c64_h48 T=1 onnxruntime=9.46 ours_wino=5.88 ours_direct=10.53 xnnpack=7.79 ncnn=3.36 ncnn_fp32=3.34
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_s2_c128_h48 T=4 onnxruntime=11.19 ours_wino=10.10 ours_direct=10.22 xnnpack=21.67 ncnn=11.63 ncnn_fp32=12.13
+activation memory: 1.8 MB (recycle=1)
+activation memory: 1.8 MB (recycle=1)
+probe_s2_c128_h48 T=1 onnxruntime=35.22 ours_wino=36.23 ours_direct=36.05 xnnpack=33.75 ncnn=30.61 ncnn_fp32=30.52
+activation memory: 2.1 MB (recycle=1)
+activation memory: 2.1 MB (recycle=1)
+probe_pool_c128_h48 T=4 onnxruntime=11.38 ours_wino=6.21 ours_direct=10.17 xnnpack=19.99 ncnn=7.19 ncnn_fp32=7.29
+activation memory: 2.1 MB (recycle=1)
+activation memory: 2.1 MB (recycle=1)
+probe_pool_c128_h48 T=1 onnxruntime=35.31 ours_wino=17.44 ours_direct=38.75 xnnpack=31.48 ncnn=11.05 ncnn_fp32=11.06
+activation memory: 0.4 MB (recycle=1)
+activation memory: 0.4 MB (recycle=1)
+probe_s2_c128_h24 T=4 onnxruntime=3.53 ours_wino=3.40 ours_direct=3.43 xnnpack=5.41 ncnn=3.11 ncnn_fp32=3.12
+activation memory: 0.4 MB (recycle=1)
+activation memory: 0.4 MB (recycle=1)
+probe_s2_c128_h24 T=1 onnxruntime=9.24 ours_wino=9.09 ours_direct=9.08 xnnpack=8.69 ncnn=7.76 ncnn_fp32=7.76
+activation memory: 0.5 MB (recycle=1)
+activation memory: 0.5 MB (recycle=1)
+probe_pool_c128_h24 T=4 onnxruntime=3.69 ours_wino=2.80 ours_direct=3.45 xnnpack=5.21 ncnn=2.47 ncnn_fp32=2.51
+activation memory: 0.5 MB (recycle=1)
+activation memory: 0.5 MB (recycle=1)
+probe_pool_c128_h24 T=1 onnxruntime=9.66 ours_wino=5.17 ours_direct=9.89 xnnpack=8.24 ncnn=3.22 ncnn_fp32=3.30
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_s2_c256_h24 T=4 onnxruntime=11.70 ours_wino=12.41 ours_direct=12.55 xnnpack=42.80 ncnn=13.81 ncnn_fp32=13.75
+activation memory: 0.9 MB (recycle=1)
+activation memory: 0.9 MB (recycle=1)
+probe_s2_c256_h24 T=1 onnxruntime=36.64 ours_wino=34.85 ours_direct=34.44 xnnpack=35.99 ncnn=29.04 ncnn_fp32=29.10
+activation memory: 1.0 MB (recycle=1)
+activation memory: 1.0 MB (recycle=1)
+probe_pool_c256_h24 T=4 onnxruntime=12.51 ours_wino=7.88 ours_direct=12.27 xnnpack=44.13 ncnn=8.93 ncnn_fp32=9.25
+activation memory: 1.0 MB (recycle=1)
+activation memory: 1.0 MB (recycle=1)
+probe_pool_c256_h24 T=1 onnxruntime=35.92 ours_wino=18.35 ours_direct=35.79 xnnpack=34.81 ncnn=10.08 ncnn_fp32=10.10
+done
+rc=0
