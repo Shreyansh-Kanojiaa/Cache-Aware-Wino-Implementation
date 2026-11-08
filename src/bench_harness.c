@@ -1118,9 +1118,18 @@ static inline void dp_pack_patches(const float* input, float* P, int pix0, int n
     }
 }
 
+/* a macro, not a function: gcc 12 crashes passing this vector type by value on aarch64 */
+#if HAS_ARM_NEON
+#define clamp4(v, lo, hi) ((v4f)vminq_f32(vmaxq_f32((float32x4_t)(v), vdupq_n_f32(lo)), vdupq_n_f32(hi)))
+#else
+#define clamp4(v, lo, hi) ({ v4f c_ = (v); for (int i_ = 0; i_ < 4; i_++) c_[i_] = c_[i_] < (lo) ? (lo) : (c_[i_] > (hi) ? (hi) : c_[i_]); c_; })
+#endif
+
 static inline void dp_write_pixels(const float* O, float* output, int pix0, int np,
-                                   int ncb, int Cout, int Hout, int Wout) {
+                                   int ncb, int Cout, int Hout, int Wout,
+                                   const float* bias, float lo, float hi) {
     size_t plane = (size_t)Hout * Wout;
+#define DP_EP(v, co) clamp4((v) + (bias ? bias[co] : 0.0f), lo, hi)
     int full_px = np / 4 * 4, full_co = Cout / 8 * 8;
     /* Whole groups: O holds 8 channels per pixel, the output 4 pixels per channel, so transpose */
     for (int co0 = 0; co0 < full_co; co0 += 8) {
@@ -1132,10 +1141,11 @@ static inline void dp_write_pixels(const float* O, float* output, int pix0, int 
                 v4f t0 = __builtin_shufflevector(a, b, 0, 4, 1, 5), t1 = __builtin_shufflevector(a, b, 2, 6, 3, 7);
                 v4f t2 = __builtin_shufflevector(c, d, 0, 4, 1, 5), t3 = __builtin_shufflevector(c, d, 2, 6, 3, 7);
                 float* y = output + (size_t)(co0 + half * 4) * plane + pix0 + j;
-                *(v4f*)(y) = __builtin_shufflevector(t0, t2, 0, 1, 4, 5);
-                *(v4f*)(y + plane) = __builtin_shufflevector(t0, t2, 2, 3, 6, 7);
-                *(v4f*)(y + 2 * plane) = __builtin_shufflevector(t1, t3, 0, 1, 4, 5);
-                *(v4f*)(y + 3 * plane) = __builtin_shufflevector(t1, t3, 2, 3, 6, 7);
+                int c0 = co0 + half * 4;
+                *(v4f*)(y) = DP_EP(__builtin_shufflevector(t0, t2, 0, 1, 4, 5), c0);
+                *(v4f*)(y + plane) = DP_EP(__builtin_shufflevector(t0, t2, 2, 3, 6, 7), c0 + 1);
+                *(v4f*)(y + 2 * plane) = DP_EP(__builtin_shufflevector(t1, t3, 0, 1, 4, 5), c0 + 2);
+                *(v4f*)(y + 3 * plane) = DP_EP(__builtin_shufflevector(t1, t3, 2, 3, 6, 7), c0 + 3);
             }
         }
     }
@@ -1143,14 +1153,18 @@ static inline void dp_write_pixels(const float* O, float* output, int pix0, int 
     for (int j = 0; j < np; j++) {
         const float* o = O + (size_t)(j / 4) * ncb * 32 + (j % 4) * 8;
         for (int co = j < full_px ? full_co : 0; co < Cout; co++) {
-            output[(size_t)co * plane + pix0 + j] = o[(co / 8) * 32 + co % 8];
+            float v = o[(co / 8) * 32 + co % 8] + (bias ? bias[co] : 0.0f);
+            output[(size_t)co * plane + pix0 + j] = v < lo ? lo : (v > hi ? hi : v);
         }
     }
+#undef DP_EP
 }
 
-void conv2d_direct_packed(
+/* bias (may be NULL) is added and the result clamped to [lo, hi] as pixels are written */
+void conv2d_direct_packed_ep(
     const float* input,
     const float* W_p,
+    const float* bias, float lo, float hi,
     float* output,
     int H, int W,
     int Cin, int Cout,
@@ -1188,7 +1202,7 @@ void conv2d_direct_packed(
                 }
             }
         }
-        dp_write_pixels(O, output, 0, N_pix, ncb, Cout, Hout, Wout);
+        dp_write_pixels(O, output, 0, N_pix, ncb, Cout, Hout, Wout, bias, lo, hi);
         free(P);
         free(O);
         return;
@@ -1219,11 +1233,16 @@ void conv2d_direct_packed(
                     }
                 }
             }
-            dp_write_pixels(O, output, pix0, np, ncb, Cout, Hout, Wout);
+            dp_write_pixels(O, output, pix0, np, ncb, Cout, Hout, Wout, bias, lo, hi);
         }
         free(P);
         free(O);
     }
+}
+
+void conv2d_direct_packed(const float* input, const float* W_p, float* output, int H, int W,
+                          int Cin, int Cout, int k, int s, int T, const char** executed_path) {
+    conv2d_direct_packed_ep(input, W_p, NULL, -INFINITY, INFINITY, output, H, W, Cin, Cout, k, s, T, executed_path);
 }
 
 /* -------------------------------------------------------------------------
@@ -1561,29 +1580,59 @@ static inline void dw3_row(const float* r0, const float* r1, const float* r2, co
     }
 }
 
-/* weights: [C][k*k] */
-void conv2d_depthwise(const float* input, const float* weights, float* output,
-                      int H, int W, int C, int k, int s, int T) {
-    int Hout = (H - k) / s + 1, Wout = (W - k) / s + 1, taps = k * k;
+/* weights: [C][k*k]. Reads outside the input count as zero (padding p), so no padded
+ * copy is needed. bias (may be NULL) is added and the result clamped to [lo, hi]. */
+void conv2d_depthwise(const float* input, const float* weights, const float* bias, float* output,
+                      int H, int W, int C, int k, int s, int p, float lo, float hi, int T) {
+    int Hout = (H + 2 * p - k) / s + 1, Wout = (W + 2 * p - k) / s + 1, taps = k * k;
+    float* zero = (float*)calloc((size_t)W + 16, sizeof(float));  /* stands in for rows above and below */
+    /* 3x3 output columns whose taps all land inside the row */
+    int w_lo = k == 3 && p <= 1 ? p : 0;
+    int w_hi = k == 3 && p <= 1 && W - 3 + p >= 0 ? (W - 3 + p) / s : -1;
+    if (w_hi > Wout - 1) w_hi = Wout - 1;
     #pragma omp parallel for collapse(2) num_threads(T) schedule(static)
     for (int c = 0; c < C; c++) {
         for (int ho = 0; ho < Hout; ho++) {
-            const float* r = input + (size_t)c * H * W + (size_t)ho * s * W;
+            const float* plane = input + (size_t)c * H * W;
             const float* f = weights + (size_t)c * taps;
             float* y = output + ((size_t)c * Hout + ho) * Wout;
-            if (k == 3 && s == 1) {
-                dw3_row(r, r + W, r + 2 * W, f, y, Wout, W, 1);
-            } else if (k == 3 && s == 2) {
-                dw3_row(r, r + W, r + 2 * W, f, y, Wout, W, 2);
+            int ih = ho * s - p;
+            if (k == 3 && p <= 1) {
+                const float* r[3];
+                for (int j = 0; j < 3; j++) r[j] = ih + j >= 0 && ih + j < H ? plane + (size_t)(ih + j) * W : zero;
+                int off = w_lo * s - p;
+                if (w_hi >= w_lo) dw3_row(r[0] + off, r[1] + off, r[2] + off, f, y + w_lo, w_hi - w_lo + 1, W - off, s);
+                for (int wo = 0; wo < Wout; wo++) {
+                    if (wo == w_lo && w_hi >= w_lo) wo = w_hi + 1;
+                    if (wo >= Wout) break;
+                    float sum = 0.0f;
+                    for (int kh = 0; kh < 3; kh++) for (int kw = 0; kw < 3; kw++) {
+                        int iw = wo * s - p + kw;
+                        if (iw >= 0 && iw < W) sum += r[kh][iw] * f[kh * 3 + kw];
+                    }
+                    y[wo] = sum;
+                }
             } else {
                 for (int wo = 0; wo < Wout; wo++) {
                     float sum = 0.0f;
-                    for (int t = 0; t < taps; t++) sum += r[(t / k) * W + t % k + wo * s] * f[t];
+                    for (int kh = 0; kh < k; kh++) {
+                        if (ih + kh < 0 || ih + kh >= H) continue;
+                        for (int kw = 0; kw < k; kw++) {
+                            int iw = wo * s - p + kw;
+                            if (iw >= 0 && iw < W) sum += plane[(size_t)(ih + kh) * W + iw] * f[kh * k + kw];
+                        }
+                    }
                     y[wo] = sum;
                 }
             }
+            float b = bias ? bias[c] : 0.0f;
+            for (int wo = 0; wo < Wout; wo++) {
+                float v = y[wo] + b;
+                y[wo] = v < lo ? lo : (v > hi ? hi : v);
+            }
         }
     }
+    free(zero);
 }
 
 /* -------------------------------------------------------------------------
@@ -1850,19 +1899,25 @@ int run_harness_selftest(void) {
         float* din = (float*)malloc(dn * sizeof(float));
         for (size_t i = 0; i < dn; i++) din[i] = (float)((long long)(i % 29) - 14) / 7.0f;
         int dks[] = {1, 3, 5}, dss[] = {1, 2, 3};
-        for (int ki = 0; ki < 3; ki++) for (int si = 0; si < 3; si++) for (int ti = 0; ti < 2; ti++) {
+        float dbias[5] = {0.5f, -1.0f, 0.25f, 2.0f, -0.75f};
+        for (int ki = 0; ki < 3; ki++) for (int si = 0; si < 3; si++) for (int ti = 0; ti < 2; ti++)
+        for (int dp = 0; dp <= 2; dp++) {
             int k = dks[ki], s = dss[si], taps = k * k;
-            int ho = (dh - k) / s + 1, wo = (dw - k) / s + 1;
+            int ho = (dh + 2 * dp - k) / s + 1, wo = (dw + 2 * dp - k) / s + 1;
+            float lo = dp == 1 ? 0.0f : -INFINITY, hi = dp == 1 ? 6.0f : INFINITY;
             size_t on = (size_t)dc * ho * wo;
             float* f = (float*)malloc((size_t)dc * taps * sizeof(float));
             for (int i = 0; i < dc * taps; i++) f[i] = (float)(i % 11 - 5) / 3.0f;
             float* out = (float*)malloc(on * sizeof(float));
-            conv2d_depthwise(din, f, out, dh, dw, dc, k, s, test_T_vals[ti]);
+            conv2d_depthwise(din, f, dp ? dbias : NULL, out, dh, dw, dc, k, s, dp, lo, hi, test_T_vals[ti]);
             for (int c = 0; c < dc; c++) for (int y = 0; y < ho; y++) for (int x = 0; x < wo; x++) {
-                float sum = 0.0f;
+                float sum = dp ? dbias[c] : 0.0f;
                 for (int kh = 0; kh < k; kh++) for (int kw = 0; kw < k; kw++) {
-                    sum += din[((size_t)c * dh + y * s + kh) * dw + x * s + kw] * f[c * taps + kh * k + kw];
+                    int iy = y * s - dp + kh, ix = x * s - dp + kw;
+                    if (iy < 0 || iy >= dh || ix < 0 || ix >= dw) continue;
+                    sum += din[((size_t)c * dh + iy) * dw + ix] * f[c * taps + kh * k + kw];
                 }
+                sum = sum < lo ? lo : (sum > hi ? hi : sum);
                 float got = out[((size_t)c * ho + y) * wo + x];
                 if (fabsf(got - sum) > 1e-3f) {
                     fprintf(stderr, "FATAL: depthwise k=%d s=%d T=%d at c=%d y=%d x=%d: %f vs %f\n",
@@ -1874,7 +1929,7 @@ int run_harness_selftest(void) {
             free(out);
         }
         free(din);
-        printf("  depthwise OK (k 1-5, stride 1-3, both thread counts)\n");
+        printf("  depthwise OK (k 1-5, stride 1-3, padding 0-2, bias and clamp, both thread counts)\n");
     }
 
     printf("  [PASSED] All variant path assertions and numerical tolerances validated.\n");

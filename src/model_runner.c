@@ -21,7 +21,8 @@ typedef struct { int c, h, w; float* d; } Tensor;
 typedef struct {
     int type, out, in, in2;
     int cin, cout, k, s, p, m, use_v5, depthwise;
-    float lo, hi;       /* clip */
+    float lo, hi;       /* clip, or the clamp fused into a conv */
+    int act;            /* conv only: 0 none, 1 clamp to [lo, hi], 2 SiLU */
     int n_ins, ins[8];  /* concat */
     int nin, nout;
     long woff, boff;
@@ -42,6 +43,10 @@ static int g_fc_fp16;  /* store fully connected weights as 16-bit floats, as ncn
 #define MAX_OUTPUTS 8
 static int g_outs[MAX_OUTPUTS];
 static int g_n_outs;
+static int g_recycle = 1;
+static int g_fuse_act = 1;             /* apply ReLU, ReLU6 and SiLU in the conv's own output pass */              /* share activation buffers between tensors whose lifetimes don't overlap */
+static int g_alias[MAX_TENSORS];       /* SPLIT halves: source tensor + 1, 0 if none */
+static size_t g_alias_off[MAX_TENSORS];
 
 static void die(const char* msg) {
     fprintf(stderr, "FATAL: %s\n", msg);
@@ -160,6 +165,30 @@ static inline void fc_group8_fp16(const __fp16* restrict Wg, const float* restri
 }
 #endif
 
+/* Bias and activation in one pass over a conv's output */
+static void conv_epilogue(Tensor* out, const float* bias, int act, float lo, float hi, int T) {
+    size_t plane = (size_t)out->h * out->w;
+    #pragma omp parallel for num_threads(T) schedule(static)
+    for (int c = 0; c < out->c; c++) {
+        float* p = out->d + c * plane;
+        float b = bias ? bias[c] : 0.0f;
+        if (act == 2) {
+            if (bias) for (size_t i = 0; i < plane; i++) p[i] += b;
+            silu_plane(p, p, plane);
+            continue;
+        }
+        size_t i = 0;
+#if HAS_ARM_NEON
+        float32x4_t vb = vdupq_n_f32(b), vlo = vdupq_n_f32(lo), vhi = vdupq_n_f32(hi);
+        for (; i + 4 <= plane; i += 4) vst1q_f32(p + i, vminq_f32(vmaxq_f32(vaddq_f32(vld1q_f32(p + i), vb), vlo), vhi));
+#endif
+        for (; i < plane; i++) {
+            float v = p[i] + b;
+            p[i] = v < lo ? lo : (v > hi ? hi : v);
+        }
+    }
+}
+
 static void run_conv(Op* o, int T) {
     Tensor* in = &g_t[o->in];
     Tensor* out = &g_t[o->out];
@@ -168,7 +197,7 @@ static void run_conv(Op* o, int T) {
     const char* path = NULL;
 
     double t0 = get_time_ms();
-    if (o->p) {
+    if (o->p && !o->depthwise) {
         int Hp = H + 2 * o->p, Wp = W + 2 * o->p;
         #pragma omp parallel for num_threads(T) schedule(static)
         for (int ci = 0; ci < o->cin; ci++) {
@@ -184,23 +213,22 @@ static void run_conv(Op* o, int T) {
     double t1 = get_time_ms();
     g_cat[CAT_PAD] += t1 - t0;
 
+    /* Depthwise and direct_packed add the bias and clamp as they write; anything else
+     * they can't do is left for one pass afterwards. */
+    float lo = o->act == 1 ? o->lo : -INFINITY, hi = o->act == 1 ? o->hi : INFINITY;
+    int done = 0;
     if (o->depthwise) {
-        conv2d_depthwise(src, o->w, out->d, H, W, o->cin, o->k, o->s, T);
+        conv2d_depthwise(src, o->w, o->bias, out->d, H, W, o->cin, o->k, o->s, o->p, lo, hi, T);
+        done = 1;
     } else if (o->use_v5) {
         if (g_v6) conv2d_v6_freq(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
         else conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
     } else {
-        conv2d_direct_packed(src, o->pack, out->d, H, W, o->cin, o->cout, o->k, o->s, T, &path);
+        conv2d_direct_packed_ep(src, o->pack, o->bias, lo, hi, out->d, H, W, o->cin, o->cout, o->k, o->s, T, &path);
+        done = 1;
     }
-    if (o->bias) {
-        size_t plane = (size_t)out->h * out->w;
-        #pragma omp parallel for num_threads(T) schedule(static)
-        for (int co = 0; co < o->cout; co++) {
-            float* p = out->d + co * plane;
-            float b = o->bias[co];
-            for (size_t i = 0; i < plane; i++) p[i] += b;
-        }
-    }
+    if (!done && (o->bias || o->act)) conv_epilogue(out, o->bias, o->act, lo, hi, T);
+    else if (done && o->act == 2) conv_epilogue(out, NULL, 2, lo, hi, T);
     g_cat[o->depthwise ? CAT_DW : (o->k == 3 && o->s == 1) ? CAT_CONV3 : CAT_CONV_OTHER] += get_time_ms() - t1;
 }
 
@@ -312,6 +340,84 @@ static void run_op(Op* o, int T) {
     g_cat[cat] += get_time_ms() - t0;
 }
 
+/* Zero-padded input buffers. Convs with the same padded shape share one: each run
+ * overwrites only the interior, so the zero border stays valid. */
+static float* pad_buffer(int c, int h, int w, int p) {
+    static struct { int c, h, w, p; float* d; } bufs[MAX_OPS];
+    static int n;
+    for (int i = 0; i < n; i++) {
+        if (g_recycle && bufs[i].c == c && bufs[i].h == h && bufs[i].w == w && bufs[i].p == p) return bufs[i].d;
+    }
+    size_t len = (size_t)c * (h + 2 * p) * (w + 2 * p);
+    float* d = v5_alloc(len);
+    memset(d, 0, len * sizeof(float));
+    bufs[n++] = (typeof(bufs[0])){c, h, w, p, d};
+    return d;
+}
+
+static int root_of(int id) {
+    while (g_alias[id]) id = g_alias[id] - 1;
+    return id;
+}
+
+/* Give every tensor its memory. With recycling, a tensor takes a free buffer as soon as
+ * the last op reading its previous owner has run (greedy best fit). Elementwise ops write
+ * in place in the plan already. Input and outputs keep their buffers for the whole run,
+ * because the input is written once and reused by every run. Returns the bytes used. */
+static size_t assign_buffers(int in_id) {
+    enum { FOREVER = MAX_OPS + 1 };
+    int last[MAX_TENSORS], slot_of[MAX_TENSORS], n_slots = 0;
+    size_t cap[MAX_TENSORS];
+    int slot_free[MAX_TENSORS];
+    for (int t = 0; t < MAX_TENSORS; t++) last[t] = -1, slot_of[t] = -1;
+    for (int i = 0; i < g_nops; i++) {
+        Op* o = &g_ops[i];
+        int ins[10], k = 0;
+        if (o->type == OP_CONCAT) for (int j = 0; j < o->n_ins; j++) ins[k++] = o->ins[j];
+        else ins[k++] = o->in;
+        if (o->type == OP_ADD) ins[k++] = o->in2;
+        for (int j = 0; j < k; j++) last[root_of(ins[j])] = i;
+        int r = root_of(o->out);
+        if (last[r] < i) last[r] = i;  /* written but never read: still needs memory */
+    }
+    last[root_of(in_id)] = FOREVER;
+    for (int j = 0; j < g_n_outs; j++) last[root_of(g_outs[j])] = FOREVER;
+
+    for (int i = -1; i < g_nops; i++) {
+        int r = i < 0 ? root_of(in_id) : root_of(g_ops[i].out);
+        if (slot_of[r] < 0) {
+            size_t need = (size_t)g_t[r].c * g_t[r].h * g_t[r].w;
+            int best = -1;
+            if (g_recycle) {
+                /* smallest free slot that fits, otherwise the largest free one (it grows) */
+                for (int s = 0; s < n_slots; s++) {
+                    if (!slot_free[s]) continue;
+                    if (best < 0) { best = s; continue; }
+                    int fits = cap[s] >= need, best_fits = cap[best] >= need;
+                    if (fits ? (!best_fits || cap[s] < cap[best]) : (!best_fits && cap[s] > cap[best])) best = s;
+                }
+            }
+            if (best < 0) best = n_slots++, cap[best] = 0;
+            if (cap[best] < need) cap[best] = need;
+            slot_free[best] = 0;
+            slot_of[r] = best;
+        }
+        /* release everything whose last reader was op i */
+        for (int t = 0; t < MAX_TENSORS; t++) {
+            if (slot_of[t] >= 0 && last[t] == i) slot_free[slot_of[t]] = 1;
+        }
+    }
+
+    float* mem[MAX_TENSORS];
+    size_t total = 0;
+    for (int s = 0; s < n_slots; s++) mem[s] = v5_alloc(cap[s]), total += cap[s] * sizeof(float);
+    for (int t = 0; t < MAX_TENSORS; t++) {
+        int r = root_of(t);
+        if (slot_of[r] >= 0) g_t[t].d = mem[slot_of[r]] + (t == r ? 0 : g_alias_off[t]);
+    }
+    return total;
+}
+
 static void load_plan(const char* path, const float* weights, int use_v5, int* in_id) {
     FILE* f = fopen(path, "r");
     if (!f) die("cannot open plan");
@@ -322,7 +428,7 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
         if (strcmp(word, "TENSOR") == 0) {
             int id, c, h, w;
             if (fscanf(f, "%d %d %d %d", &id, &c, &h, &w) != 4 || id >= MAX_TENSORS) die("bad TENSOR");
-            g_t[id] = (Tensor){c, h, w, v5_alloc((size_t)c * h * w)};
+            g_t[id] = (Tensor){c, h, w, NULL};
             continue;
         }
         if (strcmp(word, "INPUT") == 0) {
@@ -337,10 +443,9 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
             /* Channels are contiguous, so both halves point into the input: no op, no copy */
             int a, b, src;
             if (fscanf(f, "%d %d %d", &a, &b, &src) != 3) die("bad SPLIT");
-            free(g_t[a].d);
-            free(g_t[b].d);
-            g_t[a].d = g_t[src].d;
-            g_t[b].d = g_t[src].d + (size_t)g_t[a].c * g_t[a].h * g_t[a].w;
+            g_alias[a] = g_alias[b] = src + 1;
+            g_alias_off[a] = 0;
+            g_alias_off[b] = (size_t)g_t[a].c * g_t[a].h * g_t[a].w;
             continue;
         }
         if (strcmp(word, "CONV") == 0) {
@@ -358,12 +463,7 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
                 o->pack = dp_pack_weights(weights + o->woff, o->cin, o->cout, o->k);
             }
             o->bias = o->boff >= 0 ? weights + o->boff : NULL;
-            if (o->p) {
-                Tensor* in = &g_t[o->in];
-                size_t n = (size_t)o->cin * (in->h + 2 * o->p) * (in->w + 2 * o->p);
-                o->pad = v5_alloc(n);
-                memset(o->pad, 0, n * sizeof(float));
-            }
+            if (o->p) o->pad = pad_buffer(o->cin, g_t[o->in].h, g_t[o->in].w, o->p);
         } else if (strcmp(word, "DWCONV") == 0) {
             o->type = OP_CONV;
             o->depthwise = 1;
@@ -372,12 +472,6 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
             o->cout = o->cin;
             o->w = weights + o->woff;
             o->bias = o->boff >= 0 ? weights + o->boff : NULL;
-            if (o->p) {
-                Tensor* in = &g_t[o->in];
-                size_t n = (size_t)o->cin * (in->h + 2 * o->p) * (in->w + 2 * o->p);
-                o->pad = v5_alloc(n);
-                memset(o->pad, 0, n * sizeof(float));
-            }
         } else if (strcmp(word, "CLIP") == 0) {
             o->type = OP_CLIP;
             if (fscanf(f, "%d %d %f %f", &o->out, &o->in, &o->lo, &o->hi) != 4) die("bad CLIP");
@@ -425,6 +519,14 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
         } else {
             die("unknown plan op");
         }
+        Op* prev = g_nops ? &g_ops[g_nops - 1] : NULL;
+        if (g_fuse_act && prev && prev->type == OP_CONV && !prev->act && o->in == o->out && o->in == prev->out &&
+            (o->type == OP_RELU || o->type == OP_CLIP || o->type == OP_SILU)) {
+            prev->act = o->type == OP_SILU ? 2 : 1;
+            prev->lo = o->type == OP_RELU ? 0.0f : o->lo;
+            prev->hi = o->type == OP_RELU ? INFINITY : o->hi;
+            continue;
+        }
         if (++g_nops >= MAX_OPS) die("too many ops");
     }
     fclose(f);
@@ -460,6 +562,8 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--batch") == 0) g_v5_batch = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--kc") == 0) g_v5_kc = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--fc-fp16") == 0) g_fc_fp16 = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--recycle") == 0) g_recycle = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--fuse-act") == 0) g_fuse_act = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
@@ -470,6 +574,8 @@ int main(int argc, char** argv) {
     int in_id = -1;
     load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, &in_id);
     if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
+    size_t act_bytes = assign_buffers(in_id);
+    fprintf(stderr, "activation memory: %.1f MB (recycle=%d)\n", act_bytes / 1e6, g_recycle);
 
     size_t n_in = 0;
     float* input = read_floats(input_path, &n_in);
