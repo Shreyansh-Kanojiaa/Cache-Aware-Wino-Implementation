@@ -1049,6 +1049,38 @@ static inline void dp_kernel(const float* restrict W, const float* restrict P,
     *(v4f*)(O + 16) = a4; *(v4f*)(O + 20) = a5; *(v4f*)(O + 24) = a6; *(v4f*)(O + 28) = a7;
 }
 
+/* Three 4-pixel groups at once: 8 outputs x 12 pixels in 24 accumulators. The A72's
+ * multiply-add has ~7 cycles of latency on 2 pipes, so 8 accumulators (dp_kernel) can't keep
+ * it busy; 24 can. Same layouts as dp_kernel: each group's P and O are separate. */
+static inline void dp_kernel3(const float* restrict W, const float* restrict P0, const float* restrict P1,
+                              const float* restrict P2, float* restrict O0, float* restrict O1,
+                              float* restrict O2, int ntaps) {
+    v4f a0 = *(const v4f*)(O0), a1 = *(const v4f*)(O0 + 4), a2 = *(const v4f*)(O0 + 8), a3 = *(const v4f*)(O0 + 12);
+    v4f a4 = *(const v4f*)(O0 + 16), a5 = *(const v4f*)(O0 + 20), a6 = *(const v4f*)(O0 + 24), a7 = *(const v4f*)(O0 + 28);
+    v4f b0 = *(const v4f*)(O1), b1 = *(const v4f*)(O1 + 4), b2 = *(const v4f*)(O1 + 8), b3 = *(const v4f*)(O1 + 12);
+    v4f b4 = *(const v4f*)(O1 + 16), b5 = *(const v4f*)(O1 + 20), b6 = *(const v4f*)(O1 + 24), b7 = *(const v4f*)(O1 + 28);
+    v4f c0 = *(const v4f*)(O2), c1 = *(const v4f*)(O2 + 4), c2 = *(const v4f*)(O2 + 8), c3 = *(const v4f*)(O2 + 12);
+    v4f c4 = *(const v4f*)(O2 + 16), c5 = *(const v4f*)(O2 + 20), c6 = *(const v4f*)(O2 + 24), c7 = *(const v4f*)(O2 + 28);
+    for (int k = 0; k < ntaps; k++) {
+        v4f w0 = *(const v4f*)W, w1 = *(const v4f*)(W + 4);
+        v4f p = *(const v4f*)P0, q = *(const v4f*)P1, r = *(const v4f*)P2;
+        a0 += w0 * p[0]; a1 += w1 * p[0]; a2 += w0 * p[1]; a3 += w1 * p[1];
+        a4 += w0 * p[2]; a5 += w1 * p[2]; a6 += w0 * p[3]; a7 += w1 * p[3];
+        b0 += w0 * q[0]; b1 += w1 * q[0]; b2 += w0 * q[1]; b3 += w1 * q[1];
+        b4 += w0 * q[2]; b5 += w1 * q[2]; b6 += w0 * q[3]; b7 += w1 * q[3];
+        c0 += w0 * r[0]; c1 += w1 * r[0]; c2 += w0 * r[1]; c3 += w1 * r[1];
+        c4 += w0 * r[2]; c5 += w1 * r[2]; c6 += w0 * r[3]; c7 += w1 * r[3];
+        W += 8; P0 += 4; P1 += 4; P2 += 4;
+    }
+    *(v4f*)(O0) = a0; *(v4f*)(O0 + 4) = a1; *(v4f*)(O0 + 8) = a2; *(v4f*)(O0 + 12) = a3;
+    *(v4f*)(O0 + 16) = a4; *(v4f*)(O0 + 20) = a5; *(v4f*)(O0 + 24) = a6; *(v4f*)(O0 + 28) = a7;
+    *(v4f*)(O1) = b0; *(v4f*)(O1 + 4) = b1; *(v4f*)(O1 + 8) = b2; *(v4f*)(O1 + 12) = b3;
+    *(v4f*)(O1 + 16) = b4; *(v4f*)(O1 + 20) = b5; *(v4f*)(O1 + 24) = b6; *(v4f*)(O1 + 28) = b7;
+    *(v4f*)(O2) = c0; *(v4f*)(O2 + 4) = c1; *(v4f*)(O2 + 8) = c2; *(v4f*)(O2 + 12) = c3;
+    *(v4f*)(O2 + 16) = c4; *(v4f*)(O2 + 20) = c5; *(v4f*)(O2 + 24) = c6; *(v4f*)(O2 + 28) = c7;
+}
+static int g_k3 = 1;   /* 0: one group at a time, for comparison */
+
 /* Pack input channels [ci0, ci0 + nci) for pixels pix0.. into P[group][ci][tap][lane].
  * Lanes past the last pixel stay zero. */
 static inline void dp_pack_patches(const float* input, float* P, int pix0, int np,
@@ -1227,9 +1259,15 @@ void conv2d_direct_packed_ep(
                 dp_pack_patches(input, P, pix0, np, ci0, nci, H, W, Wout, k, s);
                 for (int cb = 0; cb < ncb; cb++) {
                     const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * taps) * 8;
-                    for (int g = 0; g < ng; g++) {
-                        dp_kernel(W_blk, P + (size_t)g * nci * taps * 4,
-                                  O + ((size_t)g * ncb + cb) * 32, nci * taps);
+                    int g = 0;
+                    size_t gs = (size_t)nci * taps * 4;
+                    for (; g_k3 && g + 3 <= ng; g += 3) {
+                        dp_kernel3(W_blk, P + g * gs, P + (g + 1) * gs, P + (g + 2) * gs,
+                                   O + ((size_t)g * ncb + cb) * 32, O + ((size_t)(g + 1) * ncb + cb) * 32,
+                                   O + ((size_t)(g + 2) * ncb + cb) * 32, nci * taps);
+                    }
+                    for (; g < ng; g++) {
+                        dp_kernel(W_blk, P + (size_t)g * gs, O + ((size_t)g * ncb + cb) * 32, nci * taps);
                     }
                 }
             }
@@ -1308,7 +1346,13 @@ static inline void v6_multiply(const float* U_p, const float* V, float* Mb, int 
     for (int ci0 = 0; ci0 < Cin; ci0 += g_v5_kc) {
         int nci = (ci0 + g_v5_kc <= Cin) ? g_v5_kc : Cin - ci0;
         const float* U_blk = U_p + (((size_t)k * ncb + cb) * Cin + ci0) * 8;
-        for (int g = 0; g < ng; g++) {
+        int g = 0;
+        for (; g_k3 && g + 3 <= ng; g += 3) {
+            size_t k0 = (size_t)g * alpha2 + k, k1 = k0 + alpha2, k2 = k1 + alpha2;
+            dp_kernel3(U_blk, V + (k0 * Cin + ci0) * 4, V + (k1 * Cin + ci0) * 4, V + (k2 * Cin + ci0) * 4,
+                       Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci);
+        }
+        for (; g < ng; g++) {
             size_t gk = (size_t)g * alpha2 + k;
             dp_kernel(U_blk, V + (gk * Cin + ci0) * 4, Mb + (gk * ncb + cb) * 32, nci);
         }
@@ -1546,37 +1590,47 @@ void conv2d_v6_freq(
  * ------------------------------------------------------------------------- */
 __attribute__((always_inline))
 static inline void dw3_row(const float* r0, const float* r1, const float* r2, const float* f,
-                           float* y, int Wout, int W, int s) {
+                           float* y, int Wout, int W, int s, float b, float lo, float hi) {
+    /* bias b is added and the result clamped to [lo, hi] as each pixel is stored */
     int wo = 0;
+    v4f vb = {b, b, b, b};
     if (s == 1) {
         for (; wo + 4 <= Wout; wo += 4) {
-            *(v4f*)(y + wo) =
+            v4f acc = vb +
                 *(const v4f*)(r0 + wo) * f[0] + *(const v4f*)(r0 + wo + 1) * f[1] + *(const v4f*)(r0 + wo + 2) * f[2] +
                 *(const v4f*)(r1 + wo) * f[3] + *(const v4f*)(r1 + wo + 1) * f[4] + *(const v4f*)(r1 + wo + 2) * f[5] +
                 *(const v4f*)(r2 + wo) * f[6] + *(const v4f*)(r2 + wo + 1) * f[7] + *(const v4f*)(r2 + wo + 2) * f[8];
+            *(v4f*)(y + wo) = clamp4(acc, lo, hi);
         }
     } else if (s == 2) {
         /* Every other pixel of 8; the +9 keeps the last load inside the row */
         for (; wo * 2 + 9 < W && wo + 4 <= Wout; wo += 4) {
-            v4f acc = {0.0f, 0.0f, 0.0f, 0.0f};
+            v4f acc = vb;
             const float* rows[3] = {r0, r1, r2};
             for (int r = 0; r < 3; r++) {
                 const float* p = rows[r] + wo * 2;
+#if HAS_ARM_NEON
+                /* deinterleaving loads: taps 0 and 1 for 4 pixels, then tap 2 from 2 floats on */
+                float32x4x2_t a = vld2q_f32(p), c = vld2q_f32(p + 2);
+                v4f evens = (v4f)a.val[0], odds = (v4f)a.val[1], thirds = (v4f)c.val[0];
+#else
                 v4f a0 = *(const v4f*)p, a1 = *(const v4f*)(p + 4);
                 v4f b0 = *(const v4f*)(p + 1), b1 = *(const v4f*)(p + 5);
                 v4f evens = __builtin_shufflevector(a0, a1, 0, 2, 4, 6);
                 v4f odds = __builtin_shufflevector(b0, b1, 0, 2, 4, 6);
                 v4f thirds = __builtin_shufflevector(a0, a1, 2, 4, 6, 6);
                 thirds[3] = p[8];
+#endif
                 acc += evens * f[r * 3] + odds * f[r * 3 + 1] + thirds * f[r * 3 + 2];
             }
-            *(v4f*)(y + wo) = acc;
+            *(v4f*)(y + wo) = clamp4(acc, lo, hi);
         }
     }
     for (; wo < Wout; wo++) {
-        const float* a = r0 + wo * s, *b = r1 + wo * s, *c = r2 + wo * s;
-        y[wo] = a[0] * f[0] + a[1] * f[1] + a[2] * f[2] + b[0] * f[3] + b[1] * f[4] + b[2] * f[5] +
-                c[0] * f[6] + c[1] * f[7] + c[2] * f[8];
+        const float* a = r0 + wo * s, *bb = r1 + wo * s, *c = r2 + wo * s;
+        float v = b + a[0] * f[0] + a[1] * f[1] + a[2] * f[2] + bb[0] * f[3] + bb[1] * f[4] + bb[2] * f[5] +
+                  c[0] * f[6] + c[1] * f[7] + c[2] * f[8];
+        y[wo] = v < lo ? lo : (v > hi ? hi : v);
     }
 }
 
@@ -1601,17 +1655,19 @@ void conv2d_depthwise(const float* input, const float* weights, const float* bia
                 const float* r[3];
                 for (int j = 0; j < 3; j++) r[j] = ih + j >= 0 && ih + j < H ? plane + (size_t)(ih + j) * W : zero;
                 int off = w_lo * s - p;
-                if (w_hi >= w_lo) dw3_row(r[0] + off, r[1] + off, r[2] + off, f, y + w_lo, w_hi - w_lo + 1, W - off, s);
+                float b = bias ? bias[c] : 0.0f;
+                if (w_hi >= w_lo) dw3_row(r[0] + off, r[1] + off, r[2] + off, f, y + w_lo, w_hi - w_lo + 1, W - off, s, b, lo, hi);
                 for (int wo = 0; wo < Wout; wo++) {
                     if (wo == w_lo && w_hi >= w_lo) wo = w_hi + 1;
                     if (wo >= Wout) break;
-                    float sum = 0.0f;
+                    float sum = b;
                     for (int kh = 0; kh < 3; kh++) for (int kw = 0; kw < 3; kw++) {
                         int iw = wo * s - p + kw;
                         if (iw >= 0 && iw < W) sum += r[kh][iw] * f[kh * 3 + kw];
                     }
-                    y[wo] = sum;
+                    y[wo] = sum < lo ? lo : (sum > hi ? hi : sum);
                 }
+                continue;   /* bias and clamp done */
             } else {
                 for (int wo = 0; wo < Wout; wo++) {
                     float sum = 0.0f;

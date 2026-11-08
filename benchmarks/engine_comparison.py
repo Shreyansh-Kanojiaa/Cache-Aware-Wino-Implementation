@@ -5,7 +5,8 @@ Every engine runs the same ONNX graph, weights and input, and each final output 
 compared with ONNX Runtime's. Each engine gets its own process. ncnn is set up the
 way its own benchncnn tool does it, with pool allocators and powersave off.
 
-Needs XNNPACK built in --xnnpack-dir and the ncnn Python package.
+Needs XNNPACK built in --xnnpack-dir, the ncnn Python package, LiteRT (ai-edge-litert) and,
+for converting the models to TFLite once, TensorFlow + onnx2tf in ~/venv-tf.
 Writes raw_logs/harness/engine_comparison.csv and summary/harness/engine_comparison.csv.
 """
 import argparse
@@ -235,6 +236,56 @@ def run_ncnn(param_path, bin_path, input_blob, output_blobs, input_path, shape, 
     return lats, result
 
 
+TF_VENV = os.path.expanduser("~/venv-tf")  # TensorFlow + onnx2tf, kept apart from the benchmark venv
+
+
+def convert_tflite(model, onnx_path):
+    """The same ONNX file as float32 TFLite, converted once with onnx2tf (channels-last inside)."""
+    out_dir = os.path.join(PLAN_DIR, f"{model}_tflite")
+    path = os.path.join(out_dir, f"{os.path.splitext(os.path.basename(onnx_path))[0]}_float32.tflite")
+    if not os.path.exists(path):
+        subprocess.run([os.path.join(TF_VENV, "bin", "onnx2tf"), "-i", onnx_path, "-o", out_dir, "-n"], check=True,
+                       stdout=subprocess.DEVNULL)
+    return path
+
+
+def run_tflite(tflite_path, onnx_path, input_path, shape, threads, runs, warmup):
+    """LiteRT (TensorFlow Lite's runtime) with its default XNNPACK delegate."""
+    import onnx
+    from ai_edge_litert.interpreter import Interpreter
+
+    interp = Interpreter(model_path=tflite_path, num_threads=threads)
+    interp.allocate_tensors()
+    x = np.fromfile(input_path, dtype=np.float32).reshape((1,) + tuple(shape))
+    inp = interp.get_input_details()[0]
+    if tuple(inp["shape"]) != x.shape:
+        x = x.transpose(0, 2, 3, 1)  # NCHW -> NHWC
+    assert tuple(inp["shape"]) == x.shape, (inp["shape"], x.shape)
+    interp.set_tensor(inp["index"], x)
+    for _ in range(warmup):
+        interp.invoke()
+    lats = []
+    for _ in range(runs):
+        t0 = time.perf_counter()
+        interp.invoke()
+        lats.append((time.perf_counter() - t0) * 1000.0)
+    # outputs back to the ONNX order and layout, matched by shape
+    want = [[d.dim_value for d in o.type.tensor_type.shape.dim] for o in onnx.load(onnx_path, load_external_data=False).graph.output]
+    got = [interp.get_tensor(o["index"]) for o in interp.get_output_details()]
+    outs = []
+    for shp in want:
+        for i, g in enumerate(got):
+            if g is None:
+                continue
+            if list(g.shape) == shp:
+                outs.append(g); got[i] = None; break
+            if g.ndim == 4 and list(g.transpose(0, 3, 1, 2).shape) == shp:
+                outs.append(g.transpose(0, 3, 1, 2)); got[i] = None; break
+        else:
+            raise RuntimeError(f"no TFLite output of shape {shp}")
+    return lats, np.concatenate([o.ravel() for o in outs])
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--models", default="all")
@@ -257,7 +308,8 @@ def main():
     xnn_hash = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=args.xnnpack_dir, stdout=subprocess.PIPE,
                               universal_newlines=True).stdout.strip()
     import ncnn
-    versions = f"xnnpack={xnn_hash};ncnn={ncnn.__version__}"
+    import ai_edge_litert
+    versions = f"xnnpack={xnn_hash};ncnn={ncnn.__version__};litert={ai_edge_litert.__version__}"
     print(versions, flush=True)
     timestamp = datetime.datetime.now().isoformat()
     models = MODELS if args.models == "all" else args.models.split(",")
@@ -282,6 +334,7 @@ def main():
             param_path = os.path.join(PLAN_DIR, f"{model}.param")
             bin_path = os.path.join(PLAN_DIR, f"{model}.ncnn.bin")
             in_blob, out_blob = write_ncnn_model(plan, weights, param_path, bin_path)
+            tflite_path = convert_tflite(model, onnx_path)
 
             for T in (int(t) for t in args.threads.split(",")):
                 results = []
@@ -308,6 +361,8 @@ def main():
                     lats, out = in_own_process(run_ncnn, param_path, bin_path, in_blob, out_blob, input_path, shape, T,
                                                args.runs, args.warmup, winograd, fp16)
                     record(name, lats, out)
+                lats, out = in_own_process(run_tflite, tflite_path, onnx_path, input_path, shape, T, args.runs, args.warmup)
+                record("tflite", lats, out)
                 raw_file.flush()
 
                 ours = next(r[1] for r in results if r[0] == OURS)

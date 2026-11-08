@@ -564,6 +564,9 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--fc-fp16") == 0) g_fc_fp16 = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--recycle") == 0) g_recycle = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--fuse-act") == 0) g_fuse_act = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--dp-block") == 0) g_dp_block = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--dp-kci") == 0) g_dp_kci = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--k3") == 0) g_k3 = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
