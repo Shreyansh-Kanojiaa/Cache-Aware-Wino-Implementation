@@ -55,18 +55,18 @@ DEPRECATED! use 'adapter driver' not 'interface'
 DEPRECATED! use 'adapter speed' not 'adapter_khz'
 DEPRECATED! use 'adapter driver' not 'interface'
 TARGET create
-GAP8 INIT TARGET
 0
+GAP8 INIT TARGET
 GAP8 examine target
 Init jtag
 Initialising GAP8 JTAG TAP
 Loading binary through JTAG
 {"engine": "ours_int8", "model": "resnet8", "fc_hz": 100000000, "cl_hz": 100000000, "l2_kb": 302, "l1_kb": 53, "macs": 12501632, "activations_in": "L2", "weights_in": "L2"}
-{"engine": "ours_int8", "model": "resnet8", "run": 0, "us": 37293, "cycles": 3729300, "mac_per_cycle_e2": 335, "io_us": 2533, "logits_differing": 0, "pred": 3, "wino": 1, "conv_us": 35645, "depthwise_us": 0, "add_us": 885, "pool_us": 610, "fc_us": 153, "cl_dma_in_cyc": 459108, "cl_compute_cyc": 2864789, "cl_dma_out_cyc": 31945, "cl_tasks": 30}
-{"engine": "ours_int8", "model": "resnet8", "run": 1, "us": 37262, "cycles": 3726200, "mac_per_cycle_e2": 335, "io_us": 2563, "logits_differing": 0, "pred": 3, "wino": 1, "conv_us": 35584, "depthwise_us": 0, "add_us": 885, "pool_us": 610, "fc_us": 153, "cl_dma_in_cyc": 458874, "cl_compute_cyc": 2862300, "cl_dma_out_cyc": 31791, "cl_tasks": 30}
-{"engine": "ours_int8", "model": "resnet8", "run": 2, "us": 19348, "cycles": 1934800, "mac_per_cycle_e2": 646, "io_us": 31, "logits_differing": 0, "pred": 3, "wino": 0, "conv_us": 17638, "depthwise_us": 0, "add_us": 916, "pool_us": 610, "fc_us": 153, "cl_dma_in_cyc": 175274, "cl_compute_cyc": 1639155, "cl_dma_out_cyc": 20189, "cl_tasks": 13}
-{"engine": "ours_int8", "model": "resnet8", "run": 3, "us": 19348, "cycles": 1934800, "mac_per_cycle_e2": 646, "io_us": 31, "logits_differing": 0, "pred": 3, "wino": 0, "conv_us": 17669, "depthwise_us": 0, "add_us": 916, "pool_us": 610, "fc_us": 153, "cl_dma_in_cyc": 175409, "cl_compute_cyc": 1638382, "cl_dma_out_cyc": 20340, "cl_tasks": 13}
-{"layer_us": [2227, 3357, 3327, 488, 1617, 2381, 854, 275, 1190, 2258, 458, 153, 610, 153]}
+{"engine": "ours_int8", "model": "resnet8", "run": 0, "us": 35706, "cycles": 3570600, "mac_per_cycle_e2": 350, "io_us": 2533, "logits_differing": 0, "pred": 3, "wino": 1, "conv_us": 34088, "depthwise_us": 0, "add_us": 916, "pool_us": 610, "fc_us": 61, "cl_dma_in_cyc": 460558, "cl_compute_cyc": 2715639, "cl_dma_out_cyc": 32263, "cl_tasks": 31}
+{"engine": "ours_int8", "model": "resnet8", "run": 1, "us": 35736, "cycles": 3573600, "mac_per_cycle_e2": 349, "io_us": 2533, "logits_differing": 0, "pred": 3, "wino": 1, "conv_us": 34089, "depthwise_us": 0, "add_us": 915, "pool_us": 611, "fc_us": 61, "cl_dma_in_cyc": 460473, "cl_compute_cyc": 2716578, "cl_dma_out_cyc": 32122, "cl_tasks": 31}
+{"engine": "ours_int8", "model": "resnet8", "run": 2, "us": 14679, "cycles": 1467900, "mac_per_cycle_e2": 851, "io_us": 31, "logits_differing": 0, "pred": 3, "wino": 0, "conv_us": 13093, "depthwise_us": 0, "add_us": 915, "pool_us": 610, "fc_us": 61, "cl_dma_in_cyc": 175731, "cl_compute_cyc": 1180293, "cl_dma_out_cyc": 20419, "cl_tasks": 14}
+{"engine": "ours_int8", "model": "resnet8", "run": 3, "us": 14618, "cycles": 1461800, "mac_per_cycle_e2": 855, "io_us": 31, "logits_differing": 0, "pred": 3, "wino": 0, "conv_us": 13061, "depthwise_us": 0, "add_us": 886, "pool_us": 610, "fc_us": 61, "cl_dma_in_cyc": 175245, "cl_compute_cyc": 1177386, "cl_dma_out_cyc": 20264, "cl_tasks": 14}
+{"layer_us": [1404, 2472, 2472, 488, 1191, 1861, 488, 245, 976, 1953, 244, 153, 610, 61]}
 {"done": 1}
 Launching execution with command:
 gap8-openocd -d0 -c 'gdb_port disabled; telnet_port disabled; tcl_port disabled' -f interface/ftdi/gapuino_ftdi.cfg -f target/gap8revb.tcl -f tcl/jtag_boot_entry.tcl -c 'gap8_jtag_load_binary_and_start "/home/shreyansh/wino-gap8/gap8/int8/BUILD/GAP8_V3/GCC_RISCV_PULPOS/int8_resnet8" elf 0x1c000080'

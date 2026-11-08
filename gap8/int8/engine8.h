@@ -68,15 +68,20 @@ static inline uint8_t rq8(int32_t acc, const int32_t *kl, int d, int lo, int hi)
 static void k_conv(int core, int nc) {
     const Layer *L = J8.L;
     int Wo = L->w, np = J8.rows * Wo, kp = L->kpad, nco = J8.nco, sgn = L->in_signed;
+    /* locals: the byte stores below could alias L and J8, which would make the compiler reload these */
+    const int d = L->d, lo = L->lo, hi = L->hi;
+    const int32_t *klb = J8.kl;
+    const uint8_t *wb = J8.w1;
+    uint8_t *ob = J8.out1;
     uint8_t *c0 = J8.col1 + (size_t)core * 2 * kp, *c1 = c0 + kp;
     for (int p = core * 2; p < np; p += nc * 2) {
         int two = p + 1 < np;
         const uint8_t *a0 = patch(L, p / Wo, p % Wo, c0);
         const uint8_t *a1 = two ? patch(L, (p + 1) / Wo, (p + 1) % Wo, c1) : a0;
-        uint8_t *y0 = J8.out1 + (size_t)p * nco, *y1 = y0 + nco;
+        uint8_t *y0 = ob + (size_t)p * nco, *y1 = y0 + nco;
         int co = 0;
         for (; co + 4 <= nco; co += 4) {
-            const uint8_t *w = J8.w1 + (size_t)co * kp;
+            const uint8_t *w = wb + (size_t)co * kp;
             int32_t s00 = 0, s01 = 0, s02 = 0, s03 = 0, s10 = 0, s11 = 0, s12 = 0, s13 = 0;
             for (int i = 0; i < kp; i += 4) {
                 uint32_t x0 = *(const uint32_t *)(a0 + i), x1 = *(const uint32_t *)(a1 + i);
@@ -90,24 +95,27 @@ static void k_conv(int core, int nc) {
                     s10 = SDOT4U(x1, w0, s10); s11 = SDOT4U(x1, w1, s11); s12 = SDOT4U(x1, w2, s12); s13 = SDOT4U(x1, w3, s13);
                 }
             }
-            const int32_t *kl = J8.kl + co * 2;
-            y0[co] = rq8(s00, kl, L->d, L->lo, L->hi); y0[co + 1] = rq8(s01, kl + 2, L->d, L->lo, L->hi);
-            y0[co + 2] = rq8(s02, kl + 4, L->d, L->lo, L->hi); y0[co + 3] = rq8(s03, kl + 6, L->d, L->lo, L->hi);
+            const int32_t *kl = klb + co * 2;
+            int32_t k0 = kl[0], l0 = kl[1], k1 = kl[2], l1 = kl[3], k2 = kl[4], l2 = kl[5], k3 = kl[6], l3 = kl[7];
+            uint8_t o00 = clampi((s00 * k0 + l0) >> d, lo, hi), o01 = clampi((s01 * k1 + l1) >> d, lo, hi);
+            uint8_t o02 = clampi((s02 * k2 + l2) >> d, lo, hi), o03 = clampi((s03 * k3 + l3) >> d, lo, hi);
+            y0[co] = o00; y0[co + 1] = o01; y0[co + 2] = o02; y0[co + 3] = o03;
             if (two) {
-                y1[co] = rq8(s10, kl, L->d, L->lo, L->hi); y1[co + 1] = rq8(s11, kl + 2, L->d, L->lo, L->hi);
-                y1[co + 2] = rq8(s12, kl + 4, L->d, L->lo, L->hi); y1[co + 3] = rq8(s13, kl + 6, L->d, L->lo, L->hi);
+                uint8_t o10 = clampi((s10 * k0 + l0) >> d, lo, hi), o11 = clampi((s11 * k1 + l1) >> d, lo, hi);
+                uint8_t o12 = clampi((s12 * k2 + l2) >> d, lo, hi), o13 = clampi((s13 * k3 + l3) >> d, lo, hi);
+                y1[co] = o10; y1[co + 1] = o11; y1[co + 2] = o12; y1[co + 3] = o13;
             }
         }
         for (; co < nco; co++) {          /* channels past the last group of 4 */
-            const uint8_t *w = J8.w1 + (size_t)co * kp;
+            const uint8_t *w = wb + (size_t)co * kp;
             int32_t s0 = 0, s1 = 0;
             for (int i = 0; i < kp; i += 4) {
                 uint32_t wv = *(const uint32_t *)(w + i);
                 s0 = sgn ? SDOT4S(*(const uint32_t *)(a0 + i), wv, s0) : SDOT4U(*(const uint32_t *)(a0 + i), wv, s0);
                 s1 = sgn ? SDOT4S(*(const uint32_t *)(a1 + i), wv, s1) : SDOT4U(*(const uint32_t *)(a1 + i), wv, s1);
             }
-            y0[co] = rq8(s0, J8.kl + co * 2, L->d, L->lo, L->hi);
-            if (two) y1[co] = rq8(s1, J8.kl + co * 2, L->d, L->lo, L->hi);
+            y0[co] = rq8(s0, klb + co * 2, d, lo, hi);
+            if (two) y1[co] = rq8(s1, klb + co * 2, d, lo, hi);
         }
     }
 }
@@ -200,24 +208,38 @@ static void k_wino8(int core, int nc) {
     }
 }
 
-/* depthwise: one (output row, channel range) per item, weights [kh][kw][c] */
+/* depthwise 3x3 (and other k): each core takes output pixels; per pixel, every channel's taps
+ * are bytes C apart (HWC), weights [kh][kw][c]. Signed and unsigned inputs get separate loops. */
+#define DW_PIX(T)                                                                                   \
+    for (int it = core; it < J8.rows * Wo; it += nc) {                                              \
+        int r = it / Wo, x = it % Wo;                                                               \
+        const T *base = (const T *)(J8.in1 + ((size_t)(r * s) * J8.wp + x * s) * C);                \
+        uint8_t *y = J8.out1 + (size_t)it * C;                                                      \
+        if (k == 3) {                                                                               \
+            for (int c = 0; c < C; c++) {                                                           \
+                const T *p = base + c; const int8_t *f = w + c;                                     \
+                int32_t acc = p[o0] * f[0] + p[o1] * f[C] + p[o2] * f[2 * C] + p[o3] * f[3 * C]     \
+                            + p[o4] * f[4 * C] + p[o5] * f[5 * C] + p[o6] * f[6 * C]                \
+                            + p[o7] * f[7 * C] + p[o8] * f[8 * C];                                  \
+                y[c] = (uint8_t)clampi((acc * kl[2 * c] + kl[2 * c + 1]) >> d, lo, hi);            \
+            }                                                                                       \
+        } else for (int c = 0; c < C; c++) {                                                        \
+            int32_t acc = 0;                                                                        \
+            for (int kh = 0; kh < k; kh++) for (int kw = 0; kw < k; kw++)                           \
+                acc += base[((size_t)kh * J8.wp + kw) * C + c] * w[(kh * k + kw) * C + c];          \
+            y[c] = (uint8_t)clampi((acc * kl[2 * c] + kl[2 * c + 1]) >> d, lo, hi);                \
+        }                                                                                           \
+    }
 static void k_dw(int core, int nc) {
     const Layer *L = J8.L;
-    int C = L->c, k = L->k, s = L->s, Wo = L->w, sgn = L->in_signed;
-    for (int it = core; it < J8.rows * Wo; it += nc) {
-        int r = it / Wo, x = it % Wo;
-        const uint8_t *base = J8.in1 + ((size_t)(r * s) * J8.wp + x * s) * C;
-        uint8_t *y = J8.out1 + (size_t)it * C;
-        for (int c = 0; c < C; c++) {
-            int32_t acc = 0;
-            for (int kh = 0; kh < k; kh++) for (int kw = 0; kw < k; kw++) {
-                int v = sgn ? (int8_t)base[((size_t)kh * J8.wp + kw) * C + c] : base[((size_t)kh * J8.wp + kw) * C + c];
-                acc += v * (int8_t)J8.w1[(kh * k + kw) * C + c];
-            }
-            y[c] = rq8(acc, J8.kl + c * 2, L->d, L->lo, L->hi);
-        }
-    }
+    const int C = L->c, k = L->k, s = L->s, Wo = L->w, d = L->d, lo = L->lo, hi = L->hi;
+    const int8_t *w = (const int8_t *)J8.w1;
+    const int32_t *kl = J8.kl;
+    const int rw = J8.wp * C;
+    const int o0 = 0, o1 = C, o2 = 2 * C, o3 = rw, o4 = rw + C, o5 = rw + 2 * C, o6 = 2 * rw, o7 = 2 * rw + C, o8 = 2 * rw + 2 * C;
+    if (L->in_signed) { DW_PIX(int8_t) } else { DW_PIX(uint8_t) }
 }
+#undef DW_PIX
 
 /* residual add, each core a contiguous chunk; inputs that aren't rescaled use m = 1, a = 0, s = 0
  * with the clamp skipped (rq2 is never set in these models' exports, so one loop covers them) */
@@ -383,6 +405,54 @@ static void run_gap8(const Layer *L) {
     timed_ram_wr(L->out, y, C);
 }
 
+static void k_fc(int core, int nc) {
+    const Layer *L = J8.L;
+    int nin = L->cin, sgn = L->in_signed, kp = (nin + 3) & ~3;
+    const uint8_t *x = J8.in1;
+    int32_t *y = (int32_t *)J8.out1;
+    for (int r = core; r < J8.n; r += nc) {
+        const uint8_t *w = J8.w1 + (size_t)r * kp;
+        int32_t s0 = ((const int32_t *)J8.kl)[r];
+        for (int i = 0; i < kp; i += 4)
+            s0 = sgn ? SDOT4S(*(const uint32_t *)(x + i), *(const uint32_t *)(w + i), s0)
+                     : SDOT4U(*(const uint32_t *)(x + i), *(const uint32_t *)(w + i), s0);
+        y[r] = s0;
+    }
+}
+static void fc_in(void) {
+    dma_in(J8.in1, X.src, (J8.L->cin + 3) & ~3);
+    dma_in(J8.w1, X.wsrc, X.wbytes);
+    dma_in((uint8_t *)J8.kl, X.klsrc, J8.n * 4);
+}
+static void fc_out(void) { dma_out2d(X.dst, J8.out1, J8.n * 4, J8.n * 4, J8.n * 4); }
+
+/* weights [nout][nin] in the file; rows are padded to whole words in L2 for the dot products */
+static void run_fc8_cluster(const Layer *L) {
+    int nin = L->cin, nout = L->c, kp = (nin + 3) & ~3;
+    int rows = (A1_n - kp - 64) / (kp + 8);       /* weights + bias + outputs per row */
+    if (rows > nout) rows = nout;
+    if (rows < 1) FAIL8("fc row does not fit L1");
+    uint8_t *x2 = A2, *w2 = A2 + AL4(kp), *b2 = w2 + (size_t)rows * kp;
+    int32_t *y2 = (int32_t *)(b2 + rows * 4);
+    if ((uint8_t *)(y2 + nout) > A2 + A2_n) FAIL8("fc block does not fit L2");
+    const uint8_t *x = act_read(L->in, nin, x2);
+    if (x != x2) memcpy(x2, x, nin);
+    for (int i = nin; i < kp; i++) x2[i] = 0;
+    J8.L = L; J8.in1 = A1; J8.w1 = A1 + AL4(kp); J8.kl = (const int32_t *)(J8.w1 + (size_t)rows * kp);
+    J8.out1 = (uint8_t *)(J8.kl + rows);
+    X.src = x2;
+    for (int r0 = 0; r0 < nout; r0 += rows) {
+        int n = nout - r0 < rows ? nout - r0 : rows;
+        if (kp == nin) timed_fl_rd(L->woff + r0 * nin, w2, n * nin);
+        else for (int r = 0; r < n; r++) { timed_fl_rd(L->woff + (r0 + r) * nin, w2 + (size_t)r * kp, nin); memset(w2 + (size_t)r * kp + nin, 0, kp - nin); }
+        timed_fl_rd(L->koff + r0 * 4, b2, n * 4);
+        X.wsrc = w2; X.wbytes = n * kp; X.klsrc = b2; X.dst = (uint8_t *)(y2 + r0);
+        J8.n = n;
+        cl_run(fc_in, k_fc, fc_out);
+    }
+    timed_ram_wr(L->out, y2, nout * 4);
+}
+
 static void run_fc8(const Layer *L) {
     int nin = L->cin, nout = L->c, sgn = L->in_signed;
     const uint8_t *x = act_read(L->in, nin, A2);
@@ -413,7 +483,7 @@ static void run_net8(void) {
         if (L->type == L_CONV) run_conv8(L);
         else if (L->type == L_ADD) run_add8(L);
         else if (L->type == L_GAP) run_gap8(L);
-        else run_fc8(L);
+        else run_fc8_cluster(L);
         lay_us[i] = now_us() - t0;
         cat8_us[cat] += lay_us[i];
         if (fail8) return;
