@@ -1,0 +1,159 @@
+xnnpack=52fd02e;ncnn=1.0.20261020;litert=2.3.0
+alexnet T=4 onnxruntime median=114.1ms err=0.00e+00
+activation memory: 1.6 MB (recycle=1)
+alexnet T=4 c_v6_freq median=100.2ms err=1.00e-06
+activation memory: 1.6 MB (recycle=1)
+alexnet T=4 c_v6_fc16 median=69.1ms err=1.71e-04
+activation memory: 1.6 MB (recycle=1)
+alexnet T=4 c_direct_packed median=103.6ms err=6.73e-07
+alexnet T=4 xnnpack median=177.1ms err=1.50e-06
+alexnet T=4 ncnn median=67.7ms err=1.71e-04
+alexnet T=4 ncnn_no_winograd median=101.3ms err=1.71e-04
+alexnet T=4 ncnn_fp32 median=99.8ms err=1.38e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+alexnet T=4 tflite median=173.7ms err=1.50e-06
+alexnet T=1 onnxruntime median=211.2ms err=0.00e+00
+activation memory: 1.6 MB (recycle=1)
+alexnet T=1 c_v6_freq median=167.7ms err=1.00e-06
+activation memory: 1.6 MB (recycle=1)
+alexnet T=1 c_v6_fc16 median=142.3ms err=1.71e-04
+activation memory: 1.6 MB (recycle=1)
+alexnet T=1 c_direct_packed median=200.6ms err=6.73e-07
+alexnet T=1 xnnpack median=191.8ms err=1.50e-06
+alexnet T=1 ncnn median=121.4ms err=1.71e-04
+alexnet T=1 ncnn_no_winograd median=156.3ms err=1.71e-04
+alexnet T=1 ncnn_fp32 median=140.0ms err=1.38e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+alexnet T=1 tflite median=192.1ms err=1.50e-06
+resnet18 T=4 onnxruntime median=143.6ms err=0.00e+00
+activation memory: 5.4 MB (recycle=1)
+resnet18 T=4 c_v6_freq median=118.9ms err=8.37e-07
+activation memory: 5.4 MB (recycle=1)
+resnet18 T=4 c_v6_fc16 median=118.9ms err=2.43e-04
+activation memory: 5.4 MB (recycle=1)
+resnet18 T=4 c_direct_packed median=139.1ms err=6.18e-07
+resnet18 T=4 xnnpack median=261.4ms err=8.00e-07
+resnet18 T=4 ncnn median=122.8ms err=2.43e-04
+resnet18 T=4 ncnn_no_winograd median=217.2ms err=2.43e-04
+resnet18 T=4 ncnn_fp32 median=123.0ms err=8.00e-07
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+resnet18 T=4 tflite median=263.3ms err=8.00e-07
+resnet18 T=1 onnxruntime median=411.6ms err=0.00e+00
+activation memory: 5.4 MB (recycle=1)
+resnet18 T=1 c_v6_freq median=241.8ms err=8.37e-07
+activation memory: 5.4 MB (recycle=1)
+resnet18 T=1 c_v6_fc16 median=242.2ms err=2.43e-04
+activation memory: 5.4 MB (recycle=1)
+resnet18 T=1 c_direct_packed median=419.1ms err=6.18e-07
+resnet18 T=1 xnnpack median=366.8ms err=8.00e-07
+resnet18 T=1 ncnn median=180.2ms err=2.43e-04
+resnet18 T=1 ncnn_no_winograd median=343.1ms err=2.43e-04
+resnet18 T=1 ncnn_fp32 median=179.1ms err=8.00e-07
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+resnet18 T=1 tflite median=362.4ms err=8.00e-07
+resnet34 T=4 onnxruntime median=306.0ms err=0.00e+00
+activation memory: 5.4 MB (recycle=1)
+resnet34 T=4 c_v6_freq median=216.2ms err=1.24e-06
+activation memory: 5.4 MB (recycle=1)
+resnet34 T=4 c_v6_fc16 median=217.3ms err=1.99e-04
+activation memory: 5.4 MB (recycle=1)
+resnet34 T=4 c_direct_packed median=266.0ms err=6.07e-07
+resnet34 T=4 xnnpack median=553.9ms err=5.94e-07
+resnet34 T=4 ncnn median=226.1ms err=1.99e-04
+resnet34 T=4 ncnn_no_winograd median=417.6ms err=1.99e-04
+resnet34 T=4 ncnn_fp32 median=224.3ms err=5.94e-07
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+resnet34 T=4 tflite median=552.7ms err=5.94e-07
+resnet34 T=1 onnxruntime median=934.0ms err=0.00e+00
+activation memory: 5.4 MB (recycle=1)
+resnet34 T=1 c_v6_freq median=437.1ms err=1.24e-06
+activation memory: 5.4 MB (recycle=1)
+resnet34 T=1 c_v6_fc16 median=431.3ms err=1.99e-04
+activation memory: 5.4 MB (recycle=1)
+resnet34 T=1 c_direct_packed median=826.1ms err=6.07e-07
+resnet34 T=1 xnnpack median=715.1ms err=5.94e-07
+resnet34 T=1 ncnn median=325.3ms err=1.99e-04
+resnet34 T=1 ncnn_no_winograd median=675.6ms err=1.99e-04
+resnet34 T=1 ncnn_fp32 median=319.4ms err=5.94e-07
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+resnet34 T=1 tflite median=717.6ms err=5.94e-07
+vgg16 T=4 onnxruntime median=1203.6ms err=0.00e+00
+activation memory: 26.3 MB (recycle=1)
+vgg16 T=4 c_v6_freq median=714.0ms err=2.35e-06
+activation memory: 26.3 MB (recycle=1)
+vgg16 T=4 c_v6_fc16 median=648.3ms err=3.65e-04
+activation memory: 26.3 MB (recycle=1)
+vgg16 T=4 c_direct_packed median=1033.5ms err=2.41e-06
+vgg16 T=4 xnnpack median=2909.0ms err=2.52e-06
+vgg16 T=4 ncnn median=552.8ms err=3.65e-04
+vgg16 T=4 ncnn_no_winograd median=2255.5ms err=3.65e-04
+vgg16 T=4 ncnn_fp32 median=621.9ms err=2.69e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+vgg16 T=4 tflite median=2900.7ms err=2.52e-06
+vgg16 T=1 onnxruntime median=3353.0ms err=0.00e+00
+activation memory: 26.3 MB (recycle=1)
+vgg16 T=1 c_v6_freq median=1550.3ms err=2.35e-06
+activation memory: 26.3 MB (recycle=1)
+vgg16 T=1 c_v6_fc16 median=1493.2ms err=3.65e-04
+activation memory: 26.3 MB (recycle=1)
+vgg16 T=1 c_direct_packed median=3521.9ms err=2.41e-06
+vgg16 T=1 xnnpack median=2974.4ms err=2.52e-06
+vgg16 T=1 ncnn median=1054.5ms err=3.65e-04
+vgg16 T=1 ncnn_no_winograd median=2885.9ms err=3.65e-04
+vgg16 T=1 ncnn_fp32 median=1091.7ms err=2.69e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+vgg16 T=1 tflite median=2947.9ms err=2.52e-06
+mobilenet_v2 T=4 onnxruntime median=52.8ms err=0.00e+00
+activation memory: 9.0 MB (recycle=1)
+mobilenet_v2 T=4 c_v6_freq median=40.9ms err=3.55e-06
+activation memory: 9.0 MB (recycle=1)
+mobilenet_v2 T=4 c_v6_fc16 median=40.5ms err=2.39e-04
+activation memory: 9.0 MB (recycle=1)
+mobilenet_v2 T=4 c_direct_packed median=41.4ms err=3.55e-06
+mobilenet_v2 T=4 xnnpack median=36.5ms err=5.77e-06
+mobilenet_v2 T=4 ncnn median=62.6ms err=2.37e-04
+mobilenet_v2 T=4 ncnn_no_winograd median=59.9ms err=2.37e-04
+mobilenet_v2 T=4 ncnn_fp32 median=62.5ms err=4.57e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+mobilenet_v2 T=4 tflite median=35.6ms err=5.77e-06
+mobilenet_v2 T=1 onnxruntime median=104.0ms err=0.00e+00
+activation memory: 9.0 MB (recycle=1)
+mobilenet_v2 T=1 c_v6_freq median=95.6ms err=3.92e-06
+activation memory: 9.0 MB (recycle=1)
+mobilenet_v2 T=1 c_v6_fc16 median=94.7ms err=2.39e-04
+activation memory: 9.0 MB (recycle=1)
+mobilenet_v2 T=1 c_direct_packed median=95.6ms err=3.92e-06
+mobilenet_v2 T=1 xnnpack median=73.0ms err=5.74e-06
+mobilenet_v2 T=1 ncnn median=87.9ms err=2.37e-04
+mobilenet_v2 T=1 ncnn_no_winograd median=88.4ms err=2.37e-04
+mobilenet_v2 T=1 ncnn_fp32 median=89.2ms err=4.41e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+mobilenet_v2 T=1 tflite median=69.8ms err=5.74e-06
+yolov8n T=4 onnxruntime median=528.4ms err=0.00e+00
+activation memory: 22.9 MB (recycle=1)
+yolov8n T=4 c_v6_freq median=367.6ms err=4.83e-06
+activation memory: 22.9 MB (recycle=1)
+yolov8n T=4 c_v6_fc16 median=365.5ms err=4.83e-06
+activation memory: 22.9 MB (recycle=1)
+yolov8n T=4 c_direct_packed median=402.8ms err=2.82e-06
+yolov8n T=4 xnnpack median=509.2ms err=2.82e-06
+yolov8n T=4 ncnn median=379.6ms err=8.83e-06
+yolov8n T=4 ncnn_no_winograd median=472.1ms err=2.70e-06
+yolov8n T=4 ncnn_fp32 median=374.7ms err=8.83e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+yolov8n T=4 tflite median=451.9ms err=2.82e-06
+yolov8n T=1 onnxruntime median=1155.7ms err=0.00e+00
+activation memory: 22.9 MB (recycle=1)
+yolov8n T=1 c_v6_freq median=877.3ms err=4.83e-06
+activation memory: 22.9 MB (recycle=1)
+yolov8n T=1 c_v6_fc16 median=881.0ms err=4.83e-06
+activation memory: 22.9 MB (recycle=1)
+yolov8n T=1 c_direct_packed median=1273.6ms err=2.82e-06
+yolov8n T=1 xnnpack median=1054.2ms err=2.76e-06
+yolov8n T=1 ncnn median=674.2ms err=8.83e-06
+yolov8n T=1 ncnn_no_winograd median=987.3ms err=2.57e-06
+yolov8n T=1 ncnn_fp32 median=677.1ms err=8.83e-06
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+yolov8n T=1 tflite median=995.2ms err=2.76e-06
+Summary: summary/harness/engine_comparison_final.csv
+rc=0
