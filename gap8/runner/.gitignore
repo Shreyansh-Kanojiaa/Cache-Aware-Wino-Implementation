@@ -1,0 +1,11 @@
+BUILD/
+*.log
+!logs/*.log
+models/*.bin
+models/*.u
+models/*.input
+models/*.ref
+host_*
+net_*.h
+test/*
+!test/ref.py
