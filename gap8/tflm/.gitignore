@@ -1,0 +1,4 @@
+BUILD/
+build/
+libtflm.a
+data.h

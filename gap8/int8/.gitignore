@@ -1,0 +1,8 @@
+BUILD/
+host8_*
+models/*.w8
+models/*.u8
+models/*.in8
+models/*.ref8
+models/*.layers8
+resnet8_ql/*.txt

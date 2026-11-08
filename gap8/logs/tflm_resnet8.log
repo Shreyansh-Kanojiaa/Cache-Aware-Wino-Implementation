@@ -1,0 +1,82 @@
+rm -f /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/flash.img
+riscv32-unknown-elf-gcc -O2 -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c main.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.d -o /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.o
+riscv32-unknown-elf-gcc -O2 -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c stubs.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/stubs.d -o /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/stubs.o
+stubs.c: In function 'DebugVsnprintf':
+stubs.c:15:95: warning: implicit declaration of function 'vsnprintf' [-Wimplicit-function-declaration]
+ int DebugVsnprintf(char *buffer, size_t buf_size, const char *format, va_list vlist) { return vsnprintf(buffer, buf_size, format, vlist); }
+                                                                                               ^~~~~~~~~
+riscv32-unknown-elf-gcc -O2 -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c /home/shreyansh/Projects/UROP/gap8/gap_sdk/gap8/rtos/pulp/pulp-os/kernel/conf.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.d -o /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.o
+riscv32-unknown-elf-gcc -march=rv32imcxgap8 -mPE=8 -mFC=1 -MMD -MP -Wl,--gc-sections   -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -o /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8  /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.o  /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/stubs.o /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.o /home/shreyansh/wino-gap8/gap8/tflm/libtflm.a -lstdc++ -lsupc++ -lm  -L/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/lib/gap/gapuino -lpibsp -L/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/lib/gap -lrt -lrtio -lrt -lgcc -T/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/ld/link.gap8_rev2.ld -T/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/ld/gapuino.conf.ld  -nostartfiles -nostdlib -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h
+riscv32-unknown-elf-objdump -d -h -S -t -w --show-raw-insn /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8 > /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8.s
+riscv32-unknown-elf-size -B -x --common /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8 > /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8.size
+riscv32-unknown-elf-nm -a -A -l -S --size-sort --special-syms /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8 >> /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8.size
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS      run --image --binary=/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8  
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS      run --flash --binary=/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8  
+Open On-Chip Debugger 0.10.0+dev-gb84d97ec4 (2026-09-28-11:42)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+debug_level: 0
+
+DEPRECATED! use 'adapter driver' not 'interface'
+DEPRECATED! use 'adapter speed' not 'adapter_khz'
+DEPRECATED! use 'adapter driver' not 'interface'
+TARGET create
+GAP8 INIT TARGET
+GAP8 examine target
+Init jtag
+Initialising GAP8 JTAG TAP
+--------------------------
+begining flash session (hyperflash)
+--------------------------
+load flasher to L2 memory
+Loading binary through JTAG
+[Flahser]: Hyperflash flasher is ready
+Instruct flasher to begin flash per se
+device struct address is 470047192
+going to wait on addr GAP_RDY
+loading image to flash - addr 469784844 - copied 250912 / 250912 Bytes - 100.00 %[Flahser]: flasher is done
+flasher is done, exiting
+--------------------------
+flasher is done!
+--------------------------
+--------------------------
+Reset CONFREG to 0
+--------------------------
+GAP8 examine target
+RESET: jtag boot mode=3
+DEPRECATED! use 'adapter [de]assert' not 'jtag_reset'
+Flashing image with command:
+gap8-openocd -d0 -c "gdb_port disabled; telnet_port disabled; tcl_port disabled" -c "script interface/ftdi/gapuino_ftdi.cfg; script target/gap8revb.tcl; script tcl/flash_image.tcl; script tcl/jtag_boot.tcl; gap_flash_raw_hyper /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/target.board.devices.flash.img 250912 /home/shreyansh/Projects/UROP/gap8/gap_sdk/utils/openocd_tools; exit;"
+gapy --target=gapuino_v3  gen_flash_image --boot-loader /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8  -o /home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/flash.img 
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS      run --exec-prepare --exec --binary=/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8  
+Open On-Chip Debugger 0.10.0+dev-gb84d97ec4 (2026-09-28-11:42)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+debug_level: 0
+
+DEPRECATED! use 'adapter driver' not 'interface'
+DEPRECATED! use 'adapter speed' not 'adapter_khz'
+DEPRECATED! use 'adapter driver' not 'interface'
+TARGET create
+0
+GAP8 INIT TARGET
+GAP8 examine target
+Init jtag
+Initialising GAP8 JTAG TAP
+Loading binary through JTAG
+{"engine": "tflm", "model": "resnet8_mlperf_int8", "fc_hz": 49971200, "arena_used": 54364, "in_scale_e6": 1000000, "in_zp": -128}
+{"engine": "tflm", "input": 0, "rc": 0, "cycles": 589105348, "ms": 11788, "pred": 3, "label": 3, "out_hash": "a7e29098"}
+{"engine": "tflm", "input": 1, "rc": 0, "cycles": 589112305, "ms": 11789, "pred": 8, "label": 8, "out_hash": "7d2f1a2a"}
+{"engine": "tflm", "input": 2, "rc": 0, "cycles": 589086715, "ms": 11788, "pred": 8, "label": 8, "out_hash": "7d2f1a2a"}
+{"engine": "tflm", "input": 3, "rc": 0, "cycles": 589114894, "ms": 11789, "pred": 8, "label": 0, "out_hash": "59ae951d"}
+{"engine": "tflm", "input": 4, "rc": 0, "cycles": 589122857, "ms": 11789, "pred": 6, "label": 6, "out_hash": "53344682"}
+{"engine": "tflm", "input": 5, "rc": 0, "cycles": 589088035, "ms": 11788, "pred": 6, "label": 6, "out_hash": "53344682"}
+{"engine": "tflm", "input": 6, "rc": 0, "cycles": 589136999, "ms": 11789, "pred": 1, "label": 1, "out_hash": "ef89e333"}
+{"engine": "tflm", "input": 7, "rc": 0, "cycles": 589070734, "ms": 11788, "pred": 6, "label": 6, "out_hash": "272aa855"}
+{"engine": "tflm", "correct": 7, "of": 8}
+{"done": 1}
+Launching execution with command:
+gap8-openocd -d0 -c 'gdb_port disabled; telnet_port disabled; tcl_port disabled' -f interface/ftdi/gapuino_ftdi.cfg -f target/gap8revb.tcl -f tcl/jtag_boot_entry.tcl -c 'gap8_jtag_load_binary_and_start "/home/shreyansh/wino-gap8/gap8/tflm/BUILD/GAP8_V3/GCC_RISCV_PULPOS/tflm_resnet8" elf 0x1c000080'
+exit 0

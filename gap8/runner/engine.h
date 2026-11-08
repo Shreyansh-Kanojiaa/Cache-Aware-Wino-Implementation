@@ -251,7 +251,7 @@ static void k_gemm(int core, int nc) {
  * transforms (~150 per tile) shared by a block of nco outputs. Direct is 18 per output pixel.
  * ponytail: flop counts only; time both on the board if a layer sits near the line. */
 static int wino_pays(const Op *o) {
-    if (!use_wino || o->k != 3 || o->s != 1 || o->p != 1) return 0;
+    if (!use_wino || o->type != OP_CONV || o->k != 3 || o->s != 1 || o->p != 1) return 0;
     const Ten *to = &TENS[o->out];
     int Cin = o->cin, Wo = to->w, Ho = to->h, wp = (Wo + 3) / 4 * 4 + 2;
     int pre = o->uoff >= 0;
@@ -260,6 +260,9 @@ static int wino_pays(const Op *o) {
     if (nco > o->cout) nco = o->cout;
     if (L1S && nco > L1S_n / (NC * 36) - CC) nco = L1S_n / (NC * 36) - CC;
     if (nco < 1) return 0;
+    /* Measured on ResNet-18 (board): with the transform done on the chip, 14x14 layers still gain
+     * 1.35x but 7x7 ones lose (0.54x): too few tiles, and the transform and weight reads dominate. */
+    if (!pre && Ho * Wo < 100) return 0;
     double tiles = (double)((Ho + 3) / 4) * ((Wo + 3) / 4);
     return (pre ? 0.0 : 324.0) + tiles * 72.0 + tiles * 150.0 / nco < 18.0 * Ho * Wo;
 }
@@ -446,6 +449,17 @@ static void run_net(void) {
         default: run_elt(o); break;
         }
         op_us[i] = now_us() - t0;
+#ifdef OPHASH
+        {   /* debug: hash of every op's output */
+            const Ten *t = &TENS[o->out]; uint32_t h = 2166136261u;
+            for (int i0 = 0; i0 < numel(t); i0 += A_n) {
+                int n = numel(t) - i0 < A_n ? numel(t) - i0 : A_n;
+                ram_rd(t->off + i0 * 4, A, n * 4);
+                for (int j = 0; j < n * 4; j++) h = (h ^ ((uint8_t *)A)[j]) * 16777619u;
+            }
+            printf("op %d %08x\n", i, (unsigned)h);
+        }
+#endif
         cat_us[op_cat(o)] += op_us[i];
         if (fail) return;
     }

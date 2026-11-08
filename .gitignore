@@ -34,3 +34,4 @@ bin/bench_harness
 bin/bench_harness.dSYM/
 build/
 *.onnx.data
+third_party/

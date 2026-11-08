@@ -1,0 +1,275 @@
+rm -f /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/flash.img
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution2.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution2.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution2.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/pulp_nn_conv_u8_u8_i8.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_conv_u8_u8_i8.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_conv_u8_u8_i8.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/mem.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/mem.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/mem.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/Addition11.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition11.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition11.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution4.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution4.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution4.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/pulp_nn_add_u8_u8_u8.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_add_u8_u8_u8.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_add_u8_u8_u8.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/pulp_nn_avgpool_u8_u8.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_avgpool_u8_u8.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_avgpool_u8_u8.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/dory_dma.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/dory_dma.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/dory_dma.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution10.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution10.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution10.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/RequantPooling12.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/RequantPooling12.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/RequantPooling12.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution9.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution9.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution9.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution6.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution6.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution6.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/pulp_nn_linear_u8_i32_i8.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_linear_u8_i32_i8.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_linear_u8_i32_i8.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/Addition7.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition7.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition7.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution0.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution0.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution0.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/main.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/main.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/main.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution1.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution1.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution1.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/Addition3.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition3.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition3.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/network.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/network.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/network.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/net_utils.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/net_utils.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/net_utils.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution8.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution8.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution8.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/FullyConnected13.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/FullyConnected13.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/FullyConnected13.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/pulp_nn_matmul_u8_u8_i8.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_matmul_u8_u8_i8.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_matmul_u8_u8_i8.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c src/BNReluConvolution5.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution5.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution5.o
+riscv32-unknown-elf-gcc -DNUM_CORES=8 -Iinc -O2 -fno-indirect-inlining -flto -w -DGAP_SDK=1 -DTARGET_CHIP_FAMILY_GAP8 -DFLASH_TYPE=HYPERFLASH -DUSE_HYPERFLASH -DUSE_HYPERRAM -DALWAYS_BLOCK_DMA_TRANSFERS -DFS_READ_FS -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c /home/shreyansh/Projects/UROP/gap8/gap_sdk/gap8/rtos/pulp/pulp-os/kernel/conf.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.d -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.o
+riscv32-unknown-elf-gcc -march=rv32imcxgap8 -mPE=8 -mFC=1 -MMD -MP -Wl,--gc-sections   -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution2.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_conv_u8_u8_i8.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/mem.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition11.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution4.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_add_u8_u8_u8.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_avgpool_u8_u8.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/dory_dma.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution10.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/RequantPooling12.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution9.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution6.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_linear_u8_i32_i8.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition7.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution0.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/main.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution1.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/Addition3.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/network.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/net_utils.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution8.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/FullyConnected13.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/pulp_nn_matmul_u8_u8_i8.o  /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/src/BNReluConvolution5.o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.o -lm -Wl,--print-memory-usage -flto  -L/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/lib/gap/gapuino -lpibsp -L/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/lib/gap -lrt -lrtio -lrt -lgcc -T/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/ld/link.gap8_rev2.ld -T/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/ld/gapuino.conf.ld  -nostartfiles -nostdlib -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h
+Memory region         Used Size  Region Size  %age Used
+              L2:       51336 B       512 KB      9.79%
+         fc_tcdm:        5068 B      16380 B     30.94%
+ fc_tcdm_aliased:         912 B      16380 B      5.57%
+              L1:          28 B      65532 B      0.04%
+      L1_aliased:          24 B      65532 B      0.04%
+riscv32-unknown-elf-objdump -d -h -S -t -w --show-raw-insn /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main > /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.s
+riscv32-unknown-elf-size -B -x --common /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main > /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.size
+riscv32-unknown-elf-nm -a -A -l -S --size-sort --special-syms /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main >> /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.size
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution0_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution1_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution2_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution4_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution5_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution6_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution8_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution9_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution10_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/FullyConnected13_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/inputs.hex   --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution0_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution1_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution2_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution4_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution5_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution6_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution8_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution9_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution10_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/FullyConnected13_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/inputs.hex   run --image --binary=/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main  
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution0_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution1_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution2_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution4_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution5_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution6_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution8_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution9_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution10_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/FullyConnected13_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/inputs.hex   --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution0_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution1_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution2_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution4_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution5_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution6_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution8_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution9_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution10_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/FullyConnected13_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/inputs.hex   run --flash --binary=/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main  
+Open On-Chip Debugger 0.10.0+dev-gb84d97ec4 (2026-09-28-11:42)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+debug_level: 0
+
+DEPRECATED! use 'adapter driver' not 'interface'
+DEPRECATED! use 'adapter speed' not 'adapter_khz'
+DEPRECATED! use 'adapter driver' not 'interface'
+TARGET create
+GAP8 INIT TARGET
+GAP8 examine target
+Init jtag
+Initialising GAP8 JTAG TAP
+--------------------------
+begining flash session (hyperflash)
+--------------------------
+load flasher to L2 memory
+Loading binary through JTAG
+[Flahser]: Hyperflash flasher is ready
+Instruct flasher to begin flash per se
+device struct address is 470047192
+going to wait on addr GAP_RDY
+loading image to flash - addr 469784844 - copied 262144 / 429380 Bytes - 61.05 %loading image to flash - addr 469522700 - copied 429380 / 429380 Bytes - 100.00 %[Flahser]: flasher is done
+flasher is done, exiting
+--------------------------
+flasher is done!
+--------------------------
+--------------------------
+Reset CONFREG to 0
+--------------------------
+GAP8 examine target
+RESET: jtag boot mode=3
+DEPRECATED! use 'adapter [de]assert' not 'jtag_reset'
+Flashing image with command:
+gap8-openocd -d0 -c "gdb_port disabled; telnet_port disabled; tcl_port disabled" -c "script interface/ftdi/gapuino_ftdi.cfg; script target/gap8revb.tcl; script tcl/flash_image.tcl; script tcl/jtag_boot.tcl; gap_flash_raw_hyper /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/target.board.devices.flash.img 429380 /home/shreyansh/Projects/UROP/gap8/gap_sdk/utils/openocd_tools; exit;"
+gapy --target=gapuino_v3  gen_flash_image --boot-loader /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main  -o /home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/flash.img 
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution0_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution1_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution2_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution4_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution5_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution6_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution8_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution9_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/BNReluConvolution10_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/FullyConnected13_weights.hex  --config-opt=**/flash/content/partitions/readfs/files=hex/inputs.hex   --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution0_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution1_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution2_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution4_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution5_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution6_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution8_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution9_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/BNReluConvolution10_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/FullyConnected13_weights.hex  --config-opt=flash/content/partitions/readfs/files=hex/inputs.hex   run --exec-prepare --exec --binary=/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main  
+Open On-Chip Debugger 0.10.0+dev-gb84d97ec4 (2026-09-28-11:42)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+debug_level: 0
+
+DEPRECATED! use 'adapter driver' not 'interface'
+DEPRECATED! use 'adapter speed' not 'adapter_khz'
+DEPRECATED! use 'adapter driver' not 'interface'
+TARGET create
+0
+GAP8 INIT TARGET
+GAP8 examine target
+Init jtag
+Initialising GAP8 JTAG TAP
+Loading binary through JTAG
+
+L3 Buffer alloc initial	@ 4388608:	Ok
+
+L3 Buffer alloc initial	@ 2888608:	Ok
+
+L3 Buffer alloc initial	@ 1388608:	Ok
+
+L2 Buffer alloc initial	@ 0x1c00dcb8:	Ok
+Input in L3
+
+BNReluConvolution0 performance:
+  - num cycles: 134711
+  - MACs: 442368
+  - MAC/cycle: -1.49167e-154
+  - n. of Cores: 8
+
+Layer BNReluConvolution0 0 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+BNReluConvolution1 performance:
+  - num cycles: 238188
+  - MACs: 2359296
+  - MAC/cycle: 2
+  - n. of Cores: 8
+
+Layer BNReluConvolution1 1 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+BNReluConvolution2 performance:
+  - num cycles: 238589
+  - MACs: 2359296
+  - MAC/cycle: 2
+  - n. of Cores: 8
+
+Layer BNReluConvolution2 2 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Weights in L3
+
+Addition3 performance:
+  - num cycles: 55438
+  - MACs: 0
+  - MAC/cycle: 0
+  - n. of Cores: 8
+
+Layer Addition3 3 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+BNReluConvolution4 performance:
+  - num cycles: 110961
+  - MACs: 1179648
+  - MAC/cycle: 5.31705e-315
+  - n. of Cores: 8
+
+Layer BNReluConvolution4 4 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+BNReluConvolution5 performance:
+  - num cycles: 182697
+  - MACs: 2359296
+  - MAC/cycle: -2
+  - n. of Cores: 8
+
+Layer BNReluConvolution5 5 ended: 
+Checking L2 output: Checksum OK
+
+Switching branch, already checked activation
+
+BNReluConvolution6 performance:
+  - num cycles: 40760
+  - MACs: 131072
+  - MAC/cycle: -2
+  - n. of Cores: 8
+
+Layer BNReluConvolution6 6 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Weights in L3
+
+Addition7 performance:
+  - num cycles: 23465
+  - MACs: 0
+  - MAC/cycle: 0
+  - n. of Cores: 8
+
+Layer Addition7 7 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+BNReluConvolution8 performance:
+  - num cycles: 90571
+  - MACs: 1179648
+  - MAC/cycle: 5.3186e-315
+  - n. of Cores: 8
+
+Layer BNReluConvolution8 8 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+BNReluConvolution9 performance:
+  - num cycles: 178078
+  - MACs: 2359296
+  - MAC/cycle: 2
+  - n. of Cores: 8
+
+Layer BNReluConvolution9 9 ended: 
+Checking L2 output: Checksum OK
+
+Switching branch, already checked activation
+
+BNReluConvolution10 performance:
+  - num cycles: 25601
+  - MACs: 131072
+  - MAC/cycle: -2.68156e+154
+  - n. of Cores: 8
+
+Layer BNReluConvolution10 10 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Weights in L3
+
+Addition11 performance:
+  - num cycles: 12902
+  - MACs: 0
+  - MAC/cycle: 0
+  - n. of Cores: 8
+
+Layer Addition11 11 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Weights in L3
+
+RequantPooling12 performance:
+  - num cycles: 17500
+  - MACs: 0
+  - MAC/cycle: 0
+  - n. of Cores: 8
+
+Layer RequantPooling12 12 ended: 
+Checking L2 output: Checksum OK
+
+Checking L2 input: Checksum OK
+Checking L2 weights: Checksum OK
+
+FullyConnected13 performance:
+  - num cycles: 2378
+  - MACs: 640
+  - MAC/cycle: -1.49167e-154
+  - n. of Cores: 8
+
+Layer FullyConnected13 13 ended: 
+Checking final output: Checksum OK
+
+
+Final performance:
+  - num cycles: 1351839
+  - MACs: 12501632
+  - MAC/cycle: 9.24787
+  - n. of Cores: 8
+
+Launching execution with command:
+gap8-openocd -d0 -c 'gdb_port disabled; telnet_port disabled; tcl_port disabled' -f interface/ftdi/gapuino_ftdi.cfg -f target/gap8revb.tcl -f tcl/jtag_boot_entry.tcl -c 'gap8_jtag_load_binary_and_start "/home/shreyansh/wino-gap8/third_party/dory_apps/resnet8_mixed/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main" elf 0x1c000080'
+exit 0

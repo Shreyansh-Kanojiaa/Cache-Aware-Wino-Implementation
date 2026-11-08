@@ -1,0 +1,199 @@
+rm -f /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/flash.img
+riscv32-unknown-elf-gcc -O2 -DOPHASH -DNET='"net_mobilenet_v2x2.h"' -DMODEL='"mobilenet_v2x2"' -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c main.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.d -o /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.o
+riscv32-unknown-elf-gcc -O2 -DOPHASH -DNET='"net_mobilenet_v2x2.h"' -DMODEL='"mobilenet_v2x2"' -DCONFIG_GAPUINO -DRT_FC_STACK_SIZE=2048 -D__PLATFORM_BOARD__ -D__RT_IODEV__=2 -fno-jump-tables -fno-tree-loop-distribute-patterns -fdata-sections -ffunction-sections -mchip=gap8 -mPE=8 -mFC=1 -D__riscv__ -D__GAP__ -D__GAP8__ -DCHIP_VERSION=3 -mnativeomp -D__pulp__ -DCONFIG_GAP -D__PULP_OS__ -MMD -MP -c /home/shreyansh/Projects/UROP/gap8/gap_sdk/gap8/rtos/pulp/pulp-os/kernel/conf.c  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -MD -MF /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.d -o /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.o
+riscv32-unknown-elf-gcc -march=rv32imcxgap8 -mPE=8 -mFC=1 -MMD -MP -Wl,--gc-sections   -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/io  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/include  -I/home/shreyansh/Projects/UROP/gap8/gap_sdk/tools/autotiler_v3/Emulation  -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h -o /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2  /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/main.o /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/pulp-os/conf.o   -L/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/lib/gap/gapuino -lpibsp -L/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/lib/gap -lrt -lrtio -lrt -lgcc -T/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/ld/link.gap8_rev2.ld -T/home/shreyansh/Projects/UROP/gap8/gap_sdk/install/workstation/ld/gapuino.conf.ld  -nostartfiles -nostdlib -include /home/shreyansh/Projects/UROP/gap8/gap_sdk/install/GAP8_V3/include/rt/chips/gap8_revc/config.h
+riscv32-unknown-elf-objdump -d -h -S -t -w --show-raw-insn /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2 > /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2.s
+riscv32-unknown-elf-size -B -x --common /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2 > /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2.size
+riscv32-unknown-elf-nm -a -A -l -S --size-sort --special-syms /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2 >> /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2.size
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.bin  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.u  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.input  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.ref   --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.bin  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.u  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.input  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.ref   run --image --binary=/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2  
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.bin  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.u  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.input  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.ref   --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.bin  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.u  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.input  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.ref   run --flash --binary=/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2  
+Open On-Chip Debugger 0.10.0+dev-gb84d97ec4 (2026-09-28-11:42)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+debug_level: 0
+
+DEPRECATED! use 'adapter driver' not 'interface'
+DEPRECATED! use 'adapter speed' not 'adapter_khz'
+DEPRECATED! use 'adapter driver' not 'interface'
+TARGET create
+GAP8 INIT TARGET
+GAP8 examine target
+Init jtag
+Initialising GAP8 JTAG TAP
+--------------------------
+begining flash session (hyperflash)
+--------------------------
+load flasher to L2 memory
+Loading binary through JTAG
+[Flahser]: Hyperflash flasher is ready
+Instruct flasher to begin flash per se
+device struct address is 470047192
+going to wait on addr GAP_RDY
+loading image to flash - addr 469784844 - copied 262144 / 30581388 Bytes - 0.86 %loading image to flash - addr 469522700 - copied 524288 / 30581388 Bytes - 1.71 %loading image to flash - addr 469260556 - copied 786432 / 30581388 Bytes - 2.57 %loading image to flash - addr 468998412 - copied 1048576 / 30581388 Bytes - 3.43 %loading image to flash - addr 468736268 - copied 1310720 / 30581388 Bytes - 4.29 %loading image to flash - addr 468474124 - copied 1572864 / 30581388 Bytes - 5.14 %loading image to flash - addr 468211980 - copied 1835008 / 30581388 Bytes - 6.00 %loading image to flash - addr 467949836 - copied 2097152 / 30581388 Bytes - 6.86 %loading image to flash - addr 467687692 - copied 2359296 / 30581388 Bytes - 7.71 %loading image to flash - addr 467425548 - copied 2621440 / 30581388 Bytes - 8.57 %loading image to flash - addr 467163404 - copied 2883584 / 30581388 Bytes - 9.43 %loading image to flash - addr 466901260 - copied 3145728 / 30581388 Bytes - 10.29 %loading image to flash - addr 466639116 - copied 3407872 / 30581388 Bytes - 11.14 %loading image to flash - addr 466376972 - copied 3670016 / 30581388 Bytes - 12.00 %loading image to flash - addr 466114828 - copied 3932160 / 30581388 Bytes - 12.86 %loading image to flash - addr 465852684 - copied 4194304 / 30581388 Bytes - 13.72 %loading image to flash - addr 465590540 - copied 4456448 / 30581388 Bytes - 14.57 %loading image to flash - addr 465328396 - copied 4718592 / 30581388 Bytes - 15.43 %loading image to flash - addr 465066252 - copied 4980736 / 30581388 Bytes - 16.29 %loading image to flash - addr 464804108 - copied 5242880 / 30581388 Bytes - 17.14 %loading image to flash - addr 464541964 - copied 5505024 / 30581388 Bytes - 18.00 %loading image to flash - addr 464279820 - copied 5767168 / 30581388 Bytes - 18.86 %loading image to flash - addr 464017676 - copied 6029312 / 30581388 Bytes - 19.72 %loading image to flash - addr 463755532 - copied 6291456 / 30581388 Bytes - 20.57 %loading image to flash - addr 463493388 - copied 6553600 / 30581388 Bytes - 21.43 %loading image to flash - addr 463231244 - copied 6815744 / 30581388 Bytes - 22.29 %loading image to flash - addr 462969100 - copied 7077888 / 30581388 Bytes - 23.14 %loading image to flash - addr 462706956 - copied 7340032 / 30581388 Bytes - 24.00 %loading image to flash - addr 462444812 - copied 7602176 / 30581388 Bytes - 24.86 %loading image to flash - addr 462182668 - copied 7864320 / 30581388 Bytes - 25.72 %loading image to flash - addr 461920524 - copied 8126464 / 30581388 Bytes - 26.57 %loading image to flash - addr 461658380 - copied 8388608 / 30581388 Bytes - 27.43 %loading image to flash - addr 461396236 - copied 8650752 / 30581388 Bytes - 28.29 %loading image to flash - addr 461134092 - copied 8912896 / 30581388 Bytes - 29.14 %loading image to flash - addr 460871948 - copied 9175040 / 30581388 Bytes - 30.00 %loading image to flash - addr 460609804 - copied 9437184 / 30581388 Bytes - 30.86 %loading image to flash - addr 460347660 - copied 9699328 / 30581388 Bytes - 31.72 %loading image to flash - addr 460085516 - copied 9961472 / 30581388 Bytes - 32.57 %loading image to flash - addr 459823372 - copied 10223616 / 30581388 Bytes - 33.43 %loading image to flash - addr 459561228 - copied 10485760 / 30581388 Bytes - 34.29 %loading image to flash - addr 459299084 - copied 10747904 / 30581388 Bytes - 35.15 %loading image to flash - addr 459036940 - copied 11010048 / 30581388 Bytes - 36.00 %loading image to flash - addr 458774796 - copied 11272192 / 30581388 Bytes - 36.86 %loading image to flash - addr 458512652 - copied 11534336 / 30581388 Bytes - 37.72 %loading image to flash - addr 458250508 - copied 11796480 / 30581388 Bytes - 38.57 %loading image to flash - addr 457988364 - copied 12058624 / 30581388 Bytes - 39.43 %loading image to flash - addr 457726220 - copied 12320768 / 30581388 Bytes - 40.29 %loading image to flash - addr 457464076 - copied 12582912 / 30581388 Bytes - 41.15 %loading image to flash - addr 457201932 - copied 12845056 / 30581388 Bytes - 42.00 %loading image to flash - addr 456939788 - copied 13107200 / 30581388 Bytes - 42.86 %loading image to flash - addr 456677644 - copied 13369344 / 30581388 Bytes - 43.72 %loading image to flash - addr 456415500 - copied 13631488 / 30581388 Bytes - 44.57 %loading image to flash - addr 456153356 - copied 13893632 / 30581388 Bytes - 45.43 %loading image to flash - addr 455891212 - copied 14155776 / 30581388 Bytes - 46.29 %loading image to flash - addr 455629068 - copied 14417920 / 30581388 Bytes - 47.15 %loading image to flash - addr 455366924 - copied 14680064 / 30581388 Bytes - 48.00 %loading image to flash - addr 455104780 - copied 14942208 / 30581388 Bytes - 48.86 %loading image to flash - addr 454842636 - copied 15204352 / 30581388 Bytes - 49.72 %loading image to flash - addr 454580492 - copied 15466496 / 30581388 Bytes - 50.57 %loading image to flash - addr 454318348 - copied 15728640 / 30581388 Bytes - 51.43 %loading image to flash - addr 454056204 - copied 15990784 / 30581388 Bytes - 52.29 %loading image to flash - addr 453794060 - copied 16252928 / 30581388 Bytes - 53.15 %loading image to flash - addr 453531916 - copied 16515072 / 30581388 Bytes - 54.00 %loading image to flash - addr 453269772 - copied 16777216 / 30581388 Bytes - 54.86 %loading image to flash - addr 453007628 - copied 17039360 / 30581388 Bytes - 55.72 %loading image to flash - addr 452745484 - copied 17301504 / 30581388 Bytes - 56.58 %loading image to flash - addr 452483340 - copied 17563648 / 30581388 Bytes - 57.43 %loading image to flash - addr 452221196 - copied 17825792 / 30581388 Bytes - 58.29 %loading image to flash - addr 451959052 - copied 18087936 / 30581388 Bytes - 59.15 %loading image to flash - addr 451696908 - copied 18350080 / 30581388 Bytes - 60.00 %loading image to flash - addr 451434764 - copied 18612224 / 30581388 Bytes - 60.86 %loading image to flash - addr 451172620 - copied 18874368 / 30581388 Bytes - 61.72 %loading image to flash - addr 450910476 - copied 19136512 / 30581388 Bytes - 62.58 %loading image to flash - addr 450648332 - copied 19398656 / 30581388 Bytes - 63.43 %loading image to flash - addr 450386188 - copied 19660800 / 30581388 Bytes - 64.29 %loading image to flash - addr 450124044 - copied 19922944 / 30581388 Bytes - 65.15 %loading image to flash - addr 449861900 - copied 20185088 / 30581388 Bytes - 66.00 %loading image to flash - addr 449599756 - copied 20447232 / 30581388 Bytes - 66.86 %loading image to flash - addr 449337612 - copied 20709376 / 30581388 Bytes - 67.72 %loading image to flash - addr 449075468 - copied 20971520 / 30581388 Bytes - 68.58 %loading image to flash - addr 448813324 - copied 21233664 / 30581388 Bytes - 69.43 %loading image to flash - addr 448551180 - copied 21495808 / 30581388 Bytes - 70.29 %loading image to flash - addr 448289036 - copied 21757952 / 30581388 Bytes - 71.15 %loading image to flash - addr 448026892 - copied 22020096 / 30581388 Bytes - 72.00 %loading image to flash - addr 447764748 - copied 22282240 / 30581388 Bytes - 72.86 %loading image to flash - addr 447502604 - copied 22544384 / 30581388 Bytes - 73.72 %loading image to flash - addr 447240460 - copied 22806528 / 30581388 Bytes - 74.58 %loading image to flash - addr 446978316 - copied 23068672 / 30581388 Bytes - 75.43 %loading image to flash - addr 446716172 - copied 23330816 / 30581388 Bytes - 76.29 %loading image to flash - addr 446454028 - copied 23592960 / 30581388 Bytes - 77.15 %loading image to flash - addr 446191884 - copied 23855104 / 30581388 Bytes - 78.01 %loading image to flash - addr 445929740 - copied 24117248 / 30581388 Bytes - 78.86 %loading image to flash - addr 445667596 - copied 24379392 / 30581388 Bytes - 79.72 %loading image to flash - addr 445405452 - copied 24641536 / 30581388 Bytes - 80.58 %loading image to flash - addr 445143308 - copied 24903680 / 30581388 Bytes - 81.43 %loading image to flash - addr 444881164 - copied 25165824 / 30581388 Bytes - 82.29 %loading image to flash - addr 444619020 - copied 25427968 / 30581388 Bytes - 83.15 %loading image to flash - addr 444356876 - copied 25690112 / 30581388 Bytes - 84.01 %loading image to flash - addr 444094732 - copied 25952256 / 30581388 Bytes - 84.86 %loading image to flash - addr 443832588 - copied 26214400 / 30581388 Bytes - 85.72 %loading image to flash - addr 443570444 - copied 26476544 / 30581388 Bytes - 86.58 %loading image to flash - addr 443308300 - copied 26738688 / 30581388 Bytes - 87.43 %loading image to flash - addr 443046156 - copied 27000832 / 30581388 Bytes - 88.29 %loading image to flash - addr 442784012 - copied 27262976 / 30581388 Bytes - 89.15 %loading image to flash - addr 442521868 - copied 27525120 / 30581388 Bytes - 90.01 %loading image to flash - addr 442259724 - copied 27787264 / 30581388 Bytes - 90.86 %loading image to flash - addr 441997580 - copied 28049408 / 30581388 Bytes - 91.72 %loading image to flash - addr 441735436 - copied 28311552 / 30581388 Bytes - 92.58 %loading image to flash - addr 441473292 - copied 28573696 / 30581388 Bytes - 93.43 %loading image to flash - addr 441211148 - copied 28835840 / 30581388 Bytes - 94.29 %loading image to flash - addr 440949004 - copied 29097984 / 30581388 Bytes - 95.15 %loading image to flash - addr 440686860 - copied 29360128 / 30581388 Bytes - 96.01 %loading image to flash - addr 440424716 - copied 29622272 / 30581388 Bytes - 96.86 %loading image to flash - addr 440162572 - copied 29884416 / 30581388 Bytes - 97.72 %loading image to flash - addr 439900428 - copied 30146560 / 30581388 Bytes - 98.58 %loading image to flash - addr 439638284 - copied 30408704 / 30581388 Bytes - 99.44 %loading image to flash - addr 439376140 - copied 30581388 / 30581388 Bytes - 100.00 %[Flahser]: flasher is done
+flasher is done, exiting
+--------------------------
+flasher is done!
+--------------------------
+--------------------------
+Reset CONFREG to 0
+--------------------------
+GAP8 examine target
+RESET: jtag boot mode=3
+DEPRECATED! use 'adapter [de]assert' not 'jtag_reset'
+Flashing image with command:
+gap8-openocd -d0 -c "gdb_port disabled; telnet_port disabled; tcl_port disabled" -c "script interface/ftdi/gapuino_ftdi.cfg; script target/gap8revb.tcl; script tcl/flash_image.tcl; script tcl/jtag_boot.tcl; gap_flash_raw_hyper /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/target.board.devices.flash.img 30581388 /home/shreyansh/Projects/UROP/gap8/gap_sdk/utils/openocd_tools; exit;"
+gapy --target=gapuino_v3  gen_flash_image --boot-loader /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2  -o /home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/flash.img 
+gapy --target=gapuino_v3 --platform=board --work-dir=/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.bin  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.u  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.input  --config-opt=**/flash/content/partitions/readfs/files=models/mobilenet_v2x2.ref   --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.bin  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.u  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.input  --config-opt=flash/content/partitions/readfs/files=models/mobilenet_v2x2.ref   run --exec-prepare --exec --binary=/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2  
+Open On-Chip Debugger 0.10.0+dev-gb84d97ec4 (2026-09-28-11:42)
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+debug_level: 0
+
+DEPRECATED! use 'adapter driver' not 'interface'
+DEPRECATED! use 'adapter speed' not 'adapter_khz'
+TARGET create
+DEPRECATED! use 'adapter driver' not 'interface'
+0
+GAP8 INIT TARGET
+GAP8 examine target
+Init jtag
+Initialising GAP8 JTAG TAP
+Loading binary through JTAG
+{"model": "mobilenet_v2x2", "fc_hz": 49971200, "cl_hz": 49971200, "arena_kb": 432, "l1_scratch_kb": 45, "ram_kb": 6468, "weights_kb": 13620, "inputs": 2}
+op 0 cc74fd83
+op 1 a091ebc5
+op 2 a00d2c6a
+op 3 26b7e64e
+op 4 951286d8
+op 5 bbbf45b5
+op 6 911811f3
+op 7 2905bbcd
+op 8 3bdb8115
+op 9 7181bafd
+op 10 3a064b84
+op 11 8cebb9dd
+op 12 9a0f3296
+op 13 d5259ee7
+op 14 af2ac0ba
+op 15 6c8bf812
+op 16 b575874b
+op 17 4a4034da
+op 18 f2e81b79
+op 19 6738aa62
+op 20 843ac9f1
+op 21 c7f0a2ce
+op 22 3281c8ab
+op 23 fce0bd65
+op 24 bcc18900
+op 25 e6f599ae
+op 26 a5c96d24
+op 27 98942351
+op 28 d42a17ef
+op 29 ecd3aa5e
+op 30 d5da5754
+op 31 257638ab
+op 32 b232ed0e
+op 33 2b3cffe5
+op 34 edbf023d
+op 35 6ce0e77e
+op 36 2d281c1a
+op 37 9542119e
+op 38 d2bc697f
+op 39 964b0dd1
+op 40 58f566d5
+op 41 ca98c119
+op 42 1bd24081
+op 43 6a037545
+op 44 061e9781
+op 45 3bbf6136
+op 46 d312a3b3
+op 47 9c5792c8
+op 48 0e04840f
+op 49 d07a3f73
+op 50 21f2e604
+op 51 61e7e6c4
+op 52 d5d3a447
+op 53 44264de9
+op 54 5f8cad5b
+op 55 13970327
+op 56 68218c6a
+op 57 abf79e16
+op 58 f0091fc2
+op 59 bb841552
+op 60 225ac099
+op 61 eab3d89e
+op 62 261ec72d
+op 63 17cb530a
+{"model": "mobilenet_v2x2", "input": 0, "wino": 0, "total_ms": 166822, "io_ms": 3559, "conv3x3_s1_ms": 0, "conv_other_ms": 142795, "depthwise_ms": 12290, "pool_ms": 18, "eltwise_ms": 132, "gemm_ms": 783, "out0_hash": "17cb530a", "out0_err_e9": 2399, "out0_max_e3": 459, "pred": 743}
+{"model": "mobilenet_v2x2", "wino": 0, "weight_transform_ms": 0, "op_us": [5516571, 1847808, 3138123, 10853516, 1617370, 3462158, 5977875, 2190277, 5163605, 46112, 5979095, 647187, 1717010, 2629883, 757934, 2283722, 15381, 2629883, 757660, 2290619, 15351, 2629273, 245606, 1140412, 2590149, 414429, 2276184, 7752, 2590363, 414398, 2277374, 7721, 2590301, 414398, 2279052, 7691, 2590271, 414276, 3405670, 5788116, 664367, 5111206, 11567, 5788025, 664215, 5110535, 11535, 5787750, 245911, 2141205, 4015503, 331360, 3590912, 4852, 4015320, 331512, 3590790, 4852, 4015808, 331421, 7172882, 10656158, 18280, 783081]}
+op 0 cc74fd83
+op 1 a091ebc5
+op 2 a00d2c6a
+op 3 26b7e64e
+op 4 951286d8
+op 5 bbbf45b5
+op 6 911811f3
+op 7 2905bbcd
+op 8 3bdb8115
+op 9 7181bafd
+op 10 3a064b84
+op 11 8cebb9dd
+op 12 9a0f3296
+op 13 d5259ee7
+op 14 af2ac0ba
+op 15 6c8bf812
+op 16 b575874b
+op 17 4a4034da
+op 18 f2e81b79
+op 19 6738aa62
+op 20 843ac9f1
+op 21 c7f0a2ce
+op 22 3281c8ab
+op 23 fce0bd65
+op 24 bcc18900
+op 25 e6f599ae
+op 26 a5c96d24
+op 27 98942351
+op 28 d42a17ef
+op 29 ecd3aa5e
+op 30 d5da5754
+op 31 257638ab
+op 32 b232ed0e
+op 33 2b3cffe5
+op 34 edbf023d
+op 35 6ce0e77e
+op 36 2d281c1a
+op 37 9542119e
+op 38 d2bc697f
+op 39 964b0dd1
+op 40 58f566d5
+op 41 ca98c119
+op 42 1bd24081
+op 43 6a037545
+op 44 061e9781
+op 45 3bbf6136
+op 46 d312a3b3
+op 47 9c5792c8
+op 48 0e04840f
+op 49 d07a3f73
+op 50 21f2e604
+op 51 61e7e6c4
+op 52 d5d3a447
+op 53 44264de9
+op 54 5f8cad5b
+op 55 13970327
+op 56 68218c6a
+op 57 abf79e16
+op 58 f0091fc2
+op 59 bb841552
+op 60 225ac099
+op 61 eab3d89e
+op 62 261ec72d
+op 63 17cb530a
+{"model": "mobilenet_v2x2", "input": 1, "wino": 0, "total_ms": 166797, "io_ms": 3562, "conv3x3_s1_ms": 0, "conv_other_ms": 142794, "depthwise_ms": 12290, "pool_ms": 18, "eltwise_ms": 132, "gemm_ms": 783, "out0_hash": "17cb530a", "out0_err_e9": 2399, "out0_max_e3": 459, "pred": 743}
+{"done": 1}
+Launching execution with command:
+gap8-openocd -d0 -c 'gdb_port disabled; telnet_port disabled; tcl_port disabled' -f interface/ftdi/gapuino_ftdi.cfg -f target/gap8revb.tcl -f tcl/jtag_boot_entry.tcl -c 'gap8_jtag_load_binary_and_start "/home/shreyansh/wino-gap8/gap8/runner/BUILD/GAP8_V3/GCC_RISCV_PULPOS/runner_mobilenet_v2x2" elf 0x1c000080'
+exit 0
