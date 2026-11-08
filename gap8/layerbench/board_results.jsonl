@@ -1,0 +1,45 @@
+{"board": "GAP8", "fc_hz": 49971200, "cl_hz": 49971200}
+{"fmt": "fp32", "algo": "direct", "C": 16, "H": 32, "engine": "fc", "cycles": 440877828, "cycles_per_direct_mac": 186.86, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "direct", "C": 16, "H": 32, "engine": "cl1", "cycles": 422747122, "cycles_per_direct_mac": 179.18, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "direct", "C": 16, "H": 32, "engine": "cl8", "cycles": 54357193, "cycles_per_direct_mac": 23.03, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 16, "H": 32, "engine": "fc", "cycles": 223903905, "cycles_per_direct_mac": 94.90, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 16, "H": 32, "engine": "cl1", "cycles": 203770682, "cycles_per_direct_mac": 86.36, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 16, "H": 32, "engine": "cl8", "cycles": 26361568, "cycles_per_direct_mac": 11.17, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f43", "C": 16, "H": 32, "engine": "fc", "cycles": 156854063, "cycles_per_direct_mac": 66.48, "max_rel_err_e9": 1876}
+{"fmt": "fp32", "algo": "wino_f43", "C": 16, "H": 32, "engine": "cl1", "cycles": 136001447, "cycles_per_direct_mac": 57.64, "max_rel_err_e9": 1876}
+{"fmt": "fp32", "algo": "wino_f43", "C": 16, "H": 32, "engine": "cl8", "cycles": 17613497, "cycles_per_direct_mac": 7.46, "max_rel_err_e9": 1876}
+{"fmt": "int8", "algo": "direct", "C": 16, "H": 32, "engine": "fc", "cycles": 42478776, "cycles_per_direct_mac": 18.00, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "direct", "C": 16, "H": 32, "engine": "cl1", "cycles": 66533635, "cycles_per_direct_mac": 28.20, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "direct", "C": 16, "H": 32, "engine": "cl8", "cycles": 8346096, "cycles_per_direct_mac": 3.53, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 16, "H": 32, "engine": "fc", "cycles": 28587131, "cycles_per_direct_mac": 12.11, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 16, "H": 32, "engine": "cl1", "cycles": 26462904, "cycles_per_direct_mac": 11.21, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 16, "H": 32, "engine": "cl8", "cycles": 3344406, "cycles_per_direct_mac": 1.41, "identical_to_direct": 1}
+{"fmt": "fp32", "algo": "direct", "C": 32, "H": 16, "engine": "fc", "cycles": 436396512, "cycles_per_direct_mac": 184.96, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "direct", "C": 32, "H": 16, "engine": "cl1", "cycles": 419084069, "cycles_per_direct_mac": 177.63, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "direct", "C": 32, "H": 16, "engine": "cl8", "cycles": 53843535, "cycles_per_direct_mac": 22.82, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 32, "H": 16, "engine": "fc", "cycles": 208712277, "cycles_per_direct_mac": 88.46, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 32, "H": 16, "engine": "cl1", "cycles": 193631698, "cycles_per_direct_mac": 82.07, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 32, "H": 16, "engine": "cl8", "cycles": 25040176, "cycles_per_direct_mac": 10.61, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f43", "C": 32, "H": 16, "engine": "fc", "cycles": 133101792, "cycles_per_direct_mac": 56.41, "max_rel_err_e9": 3238}
+{"fmt": "fp32", "algo": "wino_f43", "C": 32, "H": 16, "engine": "cl1", "cycles": 120217604, "cycles_per_direct_mac": 50.95, "max_rel_err_e9": 3238}
+{"fmt": "fp32", "algo": "wino_f43", "C": 32, "H": 16, "engine": "cl8", "cycles": 15557359, "cycles_per_direct_mac": 6.59, "max_rel_err_e9": 3238}
+{"fmt": "int8", "algo": "direct", "C": 32, "H": 16, "engine": "fc", "cycles": 42217023, "cycles_per_direct_mac": 17.89, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "direct", "C": 32, "H": 16, "engine": "cl1", "cycles": 66226022, "cycles_per_direct_mac": 28.07, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "direct", "C": 32, "H": 16, "engine": "cl8", "cycles": 8319472, "cycles_per_direct_mac": 3.52, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 32, "H": 16, "engine": "fc", "cycles": 26510152, "cycles_per_direct_mac": 11.23, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 32, "H": 16, "engine": "cl1", "cycles": 24440516, "cycles_per_direct_mac": 10.35, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 32, "H": 16, "engine": "cl8", "cycles": 3084254, "cycles_per_direct_mac": 1.30, "identical_to_direct": 1}
+{"fmt": "fp32", "algo": "direct", "C": 64, "H": 8, "engine": "fc", "cycles": 427790105, "cycles_per_direct_mac": 181.32, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "direct", "C": 64, "H": 8, "engine": "cl1", "cycles": 411620979, "cycles_per_direct_mac": 174.46, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "direct", "C": 64, "H": 8, "engine": "cl8", "cycles": 52848291, "cycles_per_direct_mac": 22.40, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 64, "H": 8, "engine": "fc", "cycles": 200882463, "cycles_per_direct_mac": 85.14, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 64, "H": 8, "engine": "cl1", "cycles": 188557158, "cycles_per_direct_mac": 79.92, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f23", "C": 64, "H": 8, "engine": "cl8", "cycles": 24372405, "cycles_per_direct_mac": 10.33, "max_rel_err_e9": 0}
+{"fmt": "fp32", "algo": "wino_f43", "C": 64, "skip": "transformed weights 589824 B do not fit L2"}
+{"fmt": "int8", "algo": "direct", "C": 64, "H": 8, "engine": "fc", "cycles": 42086774, "cycles_per_direct_mac": 17.83, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "direct", "C": 64, "H": 8, "engine": "cl1", "cycles": 66067747, "cycles_per_direct_mac": 28.00, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "direct", "C": 64, "H": 8, "engine": "cl8", "cycles": 8296040, "cycles_per_direct_mac": 3.51, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 64, "H": 8, "engine": "fc", "cycles": 25476228, "cycles_per_direct_mac": 10.79, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 64, "H": 8, "engine": "cl1", "cycles": 23433909, "cycles_per_direct_mac": 9.93, "identical_to_direct": 1}
+{"fmt": "int8", "algo": "wino_f23", "C": 64, "H": 8, "engine": "cl8", "cycles": 2958665, "cycles_per_direct_mac": 1.25, "identical_to_direct": 1}
+{"done": 1}
