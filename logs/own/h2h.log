@@ -1,0 +1,34 @@
+xnnpack=52fd02e;ncnn=1.0.20261020
+resnet18 T=4 onnxruntime median=148.2ms err=0.00e+00
+resnet18 T=4 c_v6_freq median=125.6ms err=8.37e-07
+resnet18 T=4 c_v6_fc16 median=124.1ms err=2.43e-04
+resnet18 T=4 c_direct_packed median=152.6ms err=6.18e-07
+resnet18 T=4 xnnpack median=259.9ms err=8.00e-07
+resnet18 T=4 ncnn median=124.6ms err=2.43e-04
+resnet18 T=4 ncnn_no_winograd median=218.3ms err=2.43e-04
+resnet18 T=4 ncnn_fp32 median=124.0ms err=8.00e-07
+resnet18 T=1 onnxruntime median=425.6ms err=0.00e+00
+resnet18 T=1 c_v6_freq median=259.8ms err=8.37e-07
+resnet18 T=1 c_v6_fc16 median=262.2ms err=2.43e-04
+resnet18 T=1 c_direct_packed median=465.3ms err=6.18e-07
+resnet18 T=1 xnnpack median=364.3ms err=8.00e-07
+resnet18 T=1 ncnn median=180.5ms err=2.43e-04
+resnet18 T=1 ncnn_no_winograd median=341.2ms err=2.43e-04
+resnet18 T=1 ncnn_fp32 median=183.7ms err=8.00e-07
+resnet34 T=4 onnxruntime median=296.6ms err=0.00e+00
+resnet34 T=4 c_v6_freq median=227.9ms err=1.24e-06
+resnet34 T=4 c_v6_fc16 median=225.8ms err=1.99e-04
+resnet34 T=4 c_direct_packed median=294.6ms err=6.07e-07
+resnet34 T=4 xnnpack median=555.6ms err=5.94e-07
+resnet34 T=4 ncnn median=225.9ms err=1.99e-04
+resnet34 T=4 ncnn_no_winograd median=407.4ms err=1.99e-04
+resnet34 T=4 ncnn_fp32 median=225.7ms err=5.94e-07
+resnet34 T=1 onnxruntime median=854.0ms err=0.00e+00
+resnet34 T=1 c_v6_freq median=468.0ms err=1.24e-06
+resnet34 T=1 c_v6_fc16 median=468.9ms err=1.99e-04
+resnet34 T=1 c_direct_packed median=905.9ms err=6.07e-07
+resnet34 T=1 xnnpack median=718.7ms err=5.94e-07
+resnet34 T=1 ncnn median=318.5ms err=1.99e-04
+resnet34 T=1 ncnn_no_winograd median=677.0ms err=1.99e-04
+resnet34 T=1 ncnn_fp32 median=321.1ms err=5.94e-07
+Summary: summary/harness/engine_comparison.csv

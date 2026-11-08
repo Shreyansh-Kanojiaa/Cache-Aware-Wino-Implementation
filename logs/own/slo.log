@@ -1,0 +1,19 @@
+T=4 64x128@56s2: onnxruntime=4.50 direct_packed=5.91 neon_direct=31.87
+T=4 128x256@28s2: onnxruntime=10.85 direct_packed=7.03 neon_direct=33.44
+T=4 256x512@14s2: onnxruntime=8.28 direct_packed=5.42 neon_direct=25.21
+T=4 32x32@56s1: onnxruntime=2.54 direct_packed=2.26 neon_direct=9.93 v5_batched_m4=1.89
+T=4 64x64@56s1: onnxruntime=8.68 direct_packed=7.41 neon_direct=41.84 v5_batched_m4=6.78
+T=4 128x128@28s1: onnxruntime=8.21 direct_packed=7.74 neon_direct=66.68 v5_batched_m4=5.18
+T=4 256x256@14s1: onnxruntime=10.11 direct_packed=8.12 neon_direct=48.47 v5_batched_m4=5.59
+T=4 512x512@14s1: onnxruntime=35.52 direct_packed=30.61 neon_direct=248.81 v5_batched_m4=19.82
+T=4 512x512@7s1: onnxruntime=11.45 direct_packed=11.80 neon_direct=51.93 v5_batched_m4=11.43
+T=1 64x128@56s2: onnxruntime=12.38 direct_packed=13.05 neon_direct=77.79
+T=1 128x256@28s2: onnxruntime=13.16 direct_packed=13.65 neon_direct=78.89
+T=1 256x512@14s2: onnxruntime=14.82 direct_packed=14.52 neon_direct=79.44
+T=1 32x32@56s1: onnxruntime=6.87 direct_packed=8.17 neon_direct=39.21 v5_batched_m4=6.44
+T=1 64x64@56s1: onnxruntime=24.01 direct_packed=27.17 neon_direct=162.80 v5_batched_m4=20.33
+T=1 128x128@28s1: onnxruntime=23.67 direct_packed=26.82 neon_direct=164.99 v5_batched_m4=17.46
+T=1 256x256@14s1: onnxruntime=26.31 direct_packed=26.32 neon_direct=160.59 v5_batched_m4=17.03
+T=1 512x512@14s1: onnxruntime=101.92 direct_packed=104.51 neon_direct=683.92 v5_batched_m4=60.76
+T=1 512x512@7s1: onnxruntime=29.61 direct_packed=28.00 neon_direct=158.86 v5_batched_m4=20.00
+Summary: summary/harness/single_layer_vs_ort.csv

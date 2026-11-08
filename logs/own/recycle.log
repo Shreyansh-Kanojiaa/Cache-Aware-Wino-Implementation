@@ -1,0 +1,14 @@
+alexnet T=1 off=180.0 on=179.8 change=-0.1% p=0.097
+alexnet T=4 off=103.6 on=103.6 change=-0.0% p=0.65
+resnet18 T=1 off=253.9 on=253.7 change=-0.1% p=0.73
+resnet18 T=4 off=123.4 on=123.2 change=-0.2% p=0.013
+resnet34 T=1 off=465.6 on=467.6 change=+0.4% p=0.014
+resnet34 T=4 off=224.1 on=224.3 change=+0.1% p=0.41
+mobilenet_v2 T=1 off=143.2 on=152.1 change=+6.2% p=2.7e-07
+mobilenet_v2 T=4 off=80.0 on=78.0 change=-2.6% p=1.8e-14
+yolov8n T=1 off=925.9 on=923.5 change=-0.3% p=0.8
+yolov8n T=4 off=400.2 on=399.7 change=-0.1% p=0.93
+vgg16 T=1 off=1580.7 on=1592.0 change=+0.7% p=1.1e-18
+vgg16 T=4 off=742.1 on=744.8 change=+0.4% p=0.14
+done
+rc=0

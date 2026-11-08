@@ -1,0 +1,41 @@
+alexnet T=4 onnxruntime median=113.1ms
+alexnet T=4 c_v5_batched median=106.3ms err=1.00e-06 {'conv3x3_s1_ms': 20.397, 'conv_other_ms': 20.409, 'pad_ms': 0.962, 'relu_ms': 0.149, 'pool_ms': 0.678, 'add_gap_ms': 0.0, 'gemm_ms': 63.734}
+alexnet T=4 c_strict_fusion median=158.1ms err=1.00e-06 {'conv3x3_s1_ms': 72.415, 'conv_other_ms': 20.354, 'pad_ms': 0.954, 'relu_ms': 0.172, 'pool_ms': 0.68, 'add_gap_ms': 0.0, 'gemm_ms': 63.38}
+alexnet T=4 c_nonfused median=105.8ms err=1.00e-06 {'conv3x3_s1_ms': 20.245, 'conv_other_ms': 20.328, 'pad_ms': 0.945, 'relu_ms': 0.138, 'pool_ms': 0.679, 'add_gap_ms': 0.0, 'gemm_ms': 63.437}
+alexnet T=4 c_direct_packed median=112.3ms err=6.57e-07 {'conv3x3_s1_ms': 25.957, 'conv_other_ms': 20.32, 'pad_ms': 0.967, 'relu_ms': 0.146, 'pool_ms': 0.676, 'add_gap_ms': 0.0, 'gemm_ms': 64.209}
+alexnet T=1 onnxruntime median=204.3ms
+alexnet T=1 c_v5_batched median=196.3ms err=1.00e-06 {'conv3x3_s1_ms': 62.196, 'conv_other_ms': 74.442, 'pad_ms': 0.935, 'relu_ms': 0.292, 'pool_ms': 2.708, 'add_gap_ms': 0.0, 'gemm_ms': 55.629}
+alexnet T=1 c_strict_fusion median=278.4ms err=1.00e-06 {'conv3x3_s1_ms': 144.217, 'conv_other_ms': 74.573, 'pad_ms': 0.967, 'relu_ms': 0.287, 'pool_ms': 2.704, 'add_gap_ms': 0.0, 'gemm_ms': 55.565}
+alexnet T=1 c_nonfused median=198.0ms err=1.00e-06 {'conv3x3_s1_ms': 63.626, 'conv_other_ms': 74.783, 'pad_ms': 0.96, 'relu_ms': 0.285, 'pool_ms': 2.705, 'add_gap_ms': 0.0, 'gemm_ms': 55.605}
+alexnet T=1 c_direct_packed median=218.5ms err=6.57e-07 {'conv3x3_s1_ms': 85.338, 'conv_other_ms': 73.527, 'pad_ms': 0.967, 'relu_ms': 0.287, 'pool_ms': 2.707, 'add_gap_ms': 0.0, 'gemm_ms': 55.623}
+resnet18 T=4 onnxruntime median=149.5ms
+resnet18 T=4 c_v5_batched median=131.5ms err=1.02e-06 {'conv3x3_s1_ms': 92.005, 'conv_other_ms': 26.023, 'pad_ms': 4.898, 'relu_ms': 3.973, 'pool_ms': 1.866, 'add_gap_ms': 2.135, 'gemm_ms': 0.526}
+resnet18 T=4 c_strict_fusion median=224.8ms err=1.02e-06 {'conv3x3_s1_ms': 185.659, 'conv_other_ms': 25.634, 'pad_ms': 4.838, 'relu_ms': 3.948, 'pool_ms': 1.876, 'add_gap_ms': 2.261, 'gemm_ms': 0.57}
+resnet18 T=4 c_nonfused median=133.1ms err=1.02e-06 {'conv3x3_s1_ms': 94.357, 'conv_other_ms': 25.695, 'pad_ms': 4.739, 'relu_ms': 3.813, 'pool_ms': 1.899, 'add_gap_ms': 1.985, 'gemm_ms': 0.572}
+resnet18 T=4 c_direct_packed median=156.2ms err=6.55e-07 {'conv3x3_s1_ms': 116.648, 'conv_other_ms': 25.508, 'pad_ms': 4.977, 'relu_ms': 4.168, 'pool_ms': 1.89, 'add_gap_ms': 2.405, 'gemm_ms': 0.58}
+resnet18 T=1 onnxruntime median=418.7ms
+resnet18 T=1 c_v5_batched median=343.2ms err=1.02e-06 {'conv3x3_s1_ms': 241.066, 'conv_other_ms': 83.325, 'pad_ms': 5.959, 'relu_ms': 4.308, 'pool_ms': 6.116, 'add_gap_ms': 2.034, 'gemm_ms': 0.53}
+resnet18 T=1 c_strict_fusion median=526.2ms err=1.02e-06 {'conv3x3_s1_ms': 423.883, 'conv_other_ms': 83.358, 'pad_ms': 5.883, 'relu_ms': 4.172, 'pool_ms': 6.116, 'add_gap_ms': 2.239, 'gemm_ms': 0.533}
+resnet18 T=1 c_nonfused median=360.7ms err=1.02e-06 {'conv3x3_s1_ms': 257.209, 'conv_other_ms': 83.742, 'pad_ms': 6.0, 'relu_ms': 4.899, 'pool_ms': 6.117, 'add_gap_ms': 2.172, 'gemm_ms': 0.532}
+resnet18 T=1 c_direct_packed median=474.7ms err=6.55e-07 {'conv3x3_s1_ms': 371.847, 'conv_other_ms': 82.968, 'pad_ms': 5.963, 'relu_ms': 4.551, 'pool_ms': 6.118, 'add_gap_ms': 2.694, 'gemm_ms': 0.529}
+resnet34 T=4 onnxruntime median=291.6ms
+resnet34 T=4 c_v5_batched median=234.3ms err=1.24e-06 {'conv3x3_s1_ms': 190.73, 'conv_other_ms': 25.701, 'pad_ms': 7.483, 'relu_ms': 4.369, 'pool_ms': 1.903, 'add_gap_ms': 3.481, 'gemm_ms': 0.601}
+resnet34 T=4 c_strict_fusion median=491.1ms err=1.24e-06 {'conv3x3_s1_ms': 446.243, 'conv_other_ms': 25.332, 'pad_ms': 7.533, 'relu_ms': 5.217, 'pool_ms': 1.871, 'add_gap_ms': 3.987, 'gemm_ms': 0.561}
+resnet34 T=4 c_nonfused median=234.0ms err=1.24e-06 {'conv3x3_s1_ms': 191.49, 'conv_other_ms': 25.297, 'pad_ms': 7.164, 'relu_ms': 4.095, 'pool_ms': 1.896, 'add_gap_ms': 3.364, 'gemm_ms': 0.587}
+resnet34 T=4 c_direct_packed median=299.0ms err=5.94e-07 {'conv3x3_s1_ms': 253.891, 'conv_other_ms': 25.284, 'pad_ms': 7.695, 'relu_ms': 5.282, 'pool_ms': 1.878, 'add_gap_ms': 4.329, 'gemm_ms': 0.539}
+resnet34 T=1 onnxruntime median=849.9ms
+resnet34 T=1 c_v5_batched median=641.0ms err=1.24e-06 {'conv3x3_s1_ms': 532.317, 'conv_other_ms': 83.091, 'pad_ms': 9.229, 'relu_ms': 5.909, 'pool_ms': 6.115, 'add_gap_ms': 3.594, 'gemm_ms': 0.508}
+resnet34 T=1 c_strict_fusion median=1078.3ms err=1.24e-06 {'conv3x3_s1_ms': 969.342, 'conv_other_ms': 83.586, 'pad_ms': 9.282, 'relu_ms': 5.705, 'pool_ms': 6.12, 'add_gap_ms': 3.699, 'gemm_ms': 0.531}
+resnet34 T=1 c_nonfused median=641.8ms err=1.24e-06 {'conv3x3_s1_ms': 533.0, 'conv_other_ms': 83.116, 'pad_ms': 9.453, 'relu_ms': 5.651, 'pool_ms': 6.111, 'add_gap_ms': 3.866, 'gemm_ms': 0.502}
+resnet34 T=1 c_direct_packed median=923.4ms err=5.94e-07 {'conv3x3_s1_ms': 815.177, 'conv_other_ms': 82.326, 'pad_ms': 9.136, 'relu_ms': 5.832, 'pool_ms': 6.1, 'add_gap_ms': 4.185, 'gemm_ms': 0.529}
+vgg16 T=4 onnxruntime median=1197.7ms
+vgg16 T=4 c_v5_batched median=870.0ms err=2.64e-06 {'conv3x3_s1_ms': 653.401, 'conv_other_ms': 0.0, 'pad_ms': 30.809, 'relu_ms': 36.452, 'pool_ms': 14.196, 'add_gap_ms': 0.0, 'gemm_ms': 134.862}
+vgg16 T=4 c_strict_fusion median=2187.5ms err=2.64e-06 {'conv3x3_s1_ms': 1970.271, 'conv_other_ms': 0.0, 'pad_ms': 30.823, 'relu_ms': 38.784, 'pool_ms': 13.898, 'add_gap_ms': 0.0, 'gemm_ms': 134.827}
+vgg16 T=4 c_nonfused median=915.7ms err=2.64e-06 {'conv3x3_s1_ms': 700.859, 'conv_other_ms': 0.0, 'pad_ms': 30.85, 'relu_ms': 35.702, 'pool_ms': 13.952, 'add_gap_ms': 0.0, 'gemm_ms': 133.321}
+vgg16 T=4 c_direct_packed median=1250.8ms err=2.44e-06 {'conv3x3_s1_ms': 1033.513, 'conv_other_ms': 0.0, 'pad_ms': 30.635, 'relu_ms': 36.705, 'pool_ms': 14.179, 'add_gap_ms': 0.0, 'gemm_ms': 134.573}
+vgg16 T=1 onnxruntime median=3388.3ms
+vgg16 T=1 c_v5_batched median=2292.9ms err=2.64e-06 {'conv3x3_s1_ms': 2055.129, 'conv_other_ms': 0.0, 'pad_ms': 29.789, 'relu_ms': 41.478, 'pool_ms': 49.571, 'add_gap_ms': 0.0, 'gemm_ms': 117.08}
+vgg16 T=1 c_strict_fusion median=4418.9ms err=2.64e-06 {'conv3x3_s1_ms': 4180.541, 'conv_other_ms': 0.0, 'pad_ms': 29.777, 'relu_ms': 40.491, 'pool_ms': 50.073, 'add_gap_ms': 0.0, 'gemm_ms': 116.995}
+vgg16 T=1 c_nonfused median=2406.8ms err=2.64e-06 {'conv3x3_s1_ms': 2169.339, 'conv_other_ms': 0.0, 'pad_ms': 30.197, 'relu_ms': 39.652, 'pool_ms': 50.014, 'add_gap_ms': 0.0, 'gemm_ms': 117.058}
+vgg16 T=1 c_direct_packed median=3989.1ms err=2.44e-06 {'conv3x3_s1_ms': 3754.052, 'conv_other_ms': 0.0, 'pad_ms': 29.223, 'relu_ms': 38.43, 'pool_ms': 50.051, 'add_gap_ms': 0.0, 'gemm_ms': 116.989}
+Summary: summary/harness/whole_model.csv

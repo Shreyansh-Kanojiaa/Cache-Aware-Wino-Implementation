@@ -1,0 +1,149 @@
+python3 benchmarks/e2e_benchmark.py \
+	--models all --runs 50 --warmup 10 --platform rpi4
+
+============================================================
+[T5] E2E Benchmark: AlexNet on rpi4
+============================================================
+     3 conv3x3 layers detected (3 stride-1)
+     Running CacheWinograd fused on 4 thread(s)...
+       mean=101.29ms  [layer-time aggregate, NOT a single e2e trace]
+     Running Non-fused Winograd...
+     Running direct conv...
+     Running ONNX Runtime...
+     Running TVM...
+       SKIPPED (not available)
+     Running AutoTVM...
+       SKIPPED (not available)
+     Wrote 200 rows to raw_logs/harness/e2e_alexnet_rpi4.csv
+
+============================================================
+[T5] E2E Benchmark: ResNet-18 on rpi4
+============================================================
+     16 conv3x3 layers detected (13 stride-1)
+     Running CacheWinograd fused on 4 thread(s)...
+       mean=392.08ms  [layer-time aggregate, NOT a single e2e trace]
+     Running Non-fused Winograd...
+     Running direct conv...
+     Running ONNX Runtime...
+W1106 17:50:04.436000 2983 torch/onnx/_internal/exporter/_compat.py:133] Setting ONNX exporter to use operator set version 18 because the requested opset_version 13 is a lower version than we have implementations for. Automatic version conversion will be performed, which may not be successful at converting to the requested version. If version conversion is unsuccessful, the opset version of the exported model will be kept at 18. Please consider setting opset_version >=18 to leverage latest ONNX features
+[torch.onnx] Obtain model graph for `ResNet([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `ResNet([...]` with `torch.export.export(..., strict=False)`... ✅
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... ✅
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... ✅
+The model version conversion is not supported by the onnxscript version converter and fallback is enabled. The model will be converted using the onnx C API (target version: 13).
+Failed to convert the model to the target version 13 using the ONNX C API. The model was not modified
+Traceback (most recent call last):
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/__init__.py", line 137, in call
+    converted_proto = _c_api_utils.call_onnx_api(
+        func=_partial_convert_version, model=model
+    )
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/_c_api_utils.py", line 65, in call_onnx_api
+    result = func(proto)
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/__init__.py", line 132, in _partial_convert_version
+    return onnx.version_converter.convert_version(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        proto, target_version=self.target_version
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnx/version_converter.py", line 39, in convert_version
+    converted_model_str = C.convert_version(model_str, target_version)
+RuntimeError: /project/onnx/version_converter/adapters/axes_input_to_attribute.h:55: adapt: Assertion `node->hasAttribute(kaxes)` failed: No initializer or constant input to node found
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... ✅
+     Running TVM...
+       SKIPPED (not available)
+     Running AutoTVM...
+       SKIPPED (not available)
+     Wrote 200 rows to raw_logs/harness/e2e_resnet18_rpi4.csv
+
+============================================================
+[T5] E2E Benchmark: ResNet-34 on rpi4
+============================================================
+     32 conv3x3 layers detected (29 stride-1)
+     Running CacheWinograd fused on 4 thread(s)...
+       mean=795.69ms  [layer-time aggregate, NOT a single e2e trace]
+     Running Non-fused Winograd...
+     Running direct conv...
+     Running ONNX Runtime...
+W1106 17:54:13.890000 2983 torch/onnx/_internal/exporter/_compat.py:133] Setting ONNX exporter to use operator set version 18 because the requested opset_version 13 is a lower version than we have implementations for. Automatic version conversion will be performed, which may not be successful at converting to the requested version. If version conversion is unsuccessful, the opset version of the exported model will be kept at 18. Please consider setting opset_version >=18 to leverage latest ONNX features
+[torch.onnx] Obtain model graph for `ResNet([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `ResNet([...]` with `torch.export.export(..., strict=False)`... ✅
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... ✅
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... ✅
+The model version conversion is not supported by the onnxscript version converter and fallback is enabled. The model will be converted using the onnx C API (target version: 13).
+Failed to convert the model to the target version 13 using the ONNX C API. The model was not modified
+Traceback (most recent call last):
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/__init__.py", line 137, in call
+    converted_proto = _c_api_utils.call_onnx_api(
+        func=_partial_convert_version, model=model
+    )
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/_c_api_utils.py", line 65, in call_onnx_api
+    result = func(proto)
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/__init__.py", line 132, in _partial_convert_version
+    return onnx.version_converter.convert_version(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        proto, target_version=self.target_version
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnx/version_converter.py", line 39, in convert_version
+    converted_model_str = C.convert_version(model_str, target_version)
+RuntimeError: /project/onnx/version_converter/adapters/axes_input_to_attribute.h:55: adapt: Assertion `node->hasAttribute(kaxes)` failed: No initializer or constant input to node found
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... ✅
+     Running TVM...
+       SKIPPED (not available)
+     Running AutoTVM...
+       SKIPPED (not available)
+     Wrote 200 rows to raw_logs/harness/e2e_resnet34_rpi4.csv
+
+============================================================
+[T5] E2E Benchmark: VGG16 on rpi4
+============================================================
+     13 conv3x3 layers detected (13 stride-1)
+     Running CacheWinograd fused on 4 thread(s)...
+       mean=3348.53ms  [layer-time aggregate, NOT a single e2e trace]
+     Running Non-fused Winograd...
+     Running direct conv...
+     Running ONNX Runtime...
+W1106 18:13:25.942000 2983 torch/onnx/_internal/exporter/_compat.py:133] Setting ONNX exporter to use operator set version 18 because the requested opset_version 13 is a lower version than we have implementations for. Automatic version conversion will be performed, which may not be successful at converting to the requested version. If version conversion is unsuccessful, the opset version of the exported model will be kept at 18. Please consider setting opset_version >=18 to leverage latest ONNX features
+[torch.onnx] Obtain model graph for `VGG([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `VGG([...]` with `torch.export.export(..., strict=False)`... ✅
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... ✅
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... ✅
+The model version conversion is not supported by the onnxscript version converter and fallback is enabled. The model will be converted using the onnx C API (target version: 13).
+Failed to convert the model to the target version 13 using the ONNX C API. The model was not modified
+Traceback (most recent call last):
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/__init__.py", line 137, in call
+    converted_proto = _c_api_utils.call_onnx_api(
+        func=_partial_convert_version, model=model
+    )
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/_c_api_utils.py", line 65, in call_onnx_api
+    result = func(proto)
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnxscript/version_converter/__init__.py", line 132, in _partial_convert_version
+    return onnx.version_converter.convert_version(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        proto, target_version=self.target_version
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/j/Cache-Aware-Wino-Implementation/venv/lib/python3.13/site-packages/onnx/version_converter.py", line 39, in convert_version
+    converted_model_str = C.convert_version(model_str, target_version)
+RuntimeError: /project/onnx/version_converter/BaseConverter.h:66: adapter_lookup: Assertion `false` failed: No Adapter From Version $14 for Relu
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... ✅
+     Running TVM...
+       SKIPPED (not available)
+     Running AutoTVM...
+       SKIPPED (not available)
+     Wrote 200 rows to raw_logs/harness/e2e_vgg16_rpi4.csv
+
+[T5] E2E summary written to summary/harness/e2e_comparison_T4.csv
+[T5] METHODOLOGY: CacheWinograd E2E = layer-time aggregate; ORT/TVM = true single-process runs.

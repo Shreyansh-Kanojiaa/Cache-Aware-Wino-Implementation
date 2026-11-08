@@ -1,0 +1,79 @@
+python3 benchmarks/rpi4_main_microbench.py \
+	--runs 30 --warmup 10 --threads 1,4 \
+	--raw raw_logs/harness/rpi4_main_microbench.csv \
+	--summary summary/harness/rpi4_main_microbench_summary.csv
+[M] RPi4 Main Microbenchmark — ALL 7 configs, m=4 (tile_dim=6)
+    n=30, warmup=10, H'=14, W'=14, threads=[1, 4]
+
+  Config (16,32), T=1:
+    unfused: mean=0.4357ms CI95=±0.0078ms
+    fused: mean=0.3832ms CI95=±0.0039ms
+    improvement=12.06% | paper=None% | NO_PAPER_CLAIM
+
+  Config (32,16), T=1:
+    unfused: mean=0.4620ms CI95=±0.0048ms
+    fused: mean=0.4099ms CI95=±0.0025ms
+    improvement=11.27% | paper=None% | NO_PAPER_CLAIM
+
+  Config (32,32), T=1:
+    unfused: mean=0.7353ms CI95=±0.0089ms
+    fused: mean=0.6463ms CI95=±0.0047ms
+    improvement=12.10% | paper=None% | NO_PAPER_CLAIM
+
+  Config (32,64), T=1:
+    unfused: mean=1.3027ms CI95=±0.0118ms
+    fused: mean=1.1152ms CI95=±0.0099ms
+    improvement=14.39% | paper=None% | NO_PAPER_CLAIM
+
+  Config (64,32), T=1:
+    unfused: mean=1.3694ms CI95=±0.0114ms
+    fused: mean=1.2034ms CI95=±0.0105ms
+    improvement=12.13% | paper=None% | NO_PAPER_CLAIM
+
+  Config (64,64), T=1:
+    unfused: mean=2.8768ms CI95=±0.0164ms
+    fused: mean=2.4003ms CI95=±0.0159ms
+    improvement=16.56% | paper=None% | NO_PAPER_CLAIM
+
+  Config (128,128), T=1:
+    unfused: mean=10.6358ms CI95=±0.0180ms
+    fused: mean=10.4646ms CI95=±0.1266ms
+    improvement=1.61% | paper=63.91% | MISMATCH
+
+  Config (16,32), T=4:
+    unfused: mean=0.1891ms CI95=±0.0059ms
+    fused: mean=0.1603ms CI95=±0.0036ms
+    improvement=15.22% | paper=None% | NO_PAPER_CLAIM
+
+  Config (32,16), T=4:
+    unfused: mean=0.1958ms CI95=±0.0054ms
+    fused: mean=0.1689ms CI95=±0.0018ms
+    improvement=13.70% | paper=None% | NO_PAPER_CLAIM
+
+  Config (32,32), T=4:
+    unfused: mean=0.2992ms CI95=±0.0037ms
+    fused: mean=0.2696ms CI95=±0.0092ms
+    improvement=9.87% | paper=None% | NO_PAPER_CLAIM
+
+  Config (32,64), T=4:
+    unfused: mean=0.5165ms CI95=±0.0133ms
+    fused: mean=0.5737ms CI95=±0.0920ms
+    improvement=-11.07% | paper=None% | NO_PAPER_CLAIM
+
+  Config (64,32), T=4:
+    unfused: mean=0.5447ms CI95=±0.0091ms
+    fused: mean=0.5166ms CI95=±0.0072ms
+    improvement=5.17% | paper=None% | NO_PAPER_CLAIM
+
+  Config (64,64), T=4:
+    unfused: mean=1.1517ms CI95=±0.0174ms
+    fused: mean=0.9464ms CI95=±0.0113ms
+    improvement=17.82% | paper=None% | NO_PAPER_CLAIM
+
+  Config (128,128), T=4:
+    unfused: mean=5.2871ms CI95=±0.1043ms
+    fused: mean=5.3254ms CI95=±0.0698ms
+    improvement=-0.72% | paper=None% | NO_PAPER_CLAIM
+
+[M] Raw: raw_logs/harness/rpi4_main_microbench.csv
+[M] Summary: summary/harness/rpi4_main_microbench_summary.csv

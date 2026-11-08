@@ -1,0 +1,14 @@
+xnnpack=52fd02e;ncnn=1.0.20261020
+vgg16 T=4 onnxruntime median=1270.5ms err=0.00e+00
+vgg16 T=4 c_v5_batched median=869.3ms err=2.64e-06
+vgg16 T=4 c_direct_packed median=1249.2ms err=2.44e-06
+vgg16 T=4 xnnpack median=2896.6ms err=2.52e-06
+vgg16 T=4 ncnn median=545.1ms err=3.65e-04
+vgg16 T=4 ncnn_no_winograd median=2201.0ms err=3.65e-04
+vgg16 T=1 onnxruntime median=3341.2ms err=0.00e+00
+vgg16 T=1 c_v5_batched median=2295.7ms err=2.64e-06
+vgg16 T=1 c_direct_packed median=3980.0ms err=2.44e-06
+vgg16 T=1 xnnpack median=2971.9ms err=2.52e-06
+vgg16 T=1 ncnn median=1056.0ms err=3.65e-04
+vgg16 T=1 ncnn_no_winograd median=2878.0ms err=3.65e-04
+Summary: summary/harness/engine_comparison.csv

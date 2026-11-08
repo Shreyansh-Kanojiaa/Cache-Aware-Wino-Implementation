@@ -1,0 +1,8 @@
+yolov8n T=1 total 953.2->921.8 ms (+3.3%) conv_other 430.3->399.3 identical=True err_vs_ort=4.8e-06 flags=['0x0']
+yolov8n T=4 total 408.7->403.5 ms (+1.3%) conv_other 144.5->138.6 identical=True err_vs_ort=4.8e-06 flags=['0x0']
+resnet18 T=1 total 258.6->256.4 ms (+0.9%) conv_other 78.2->76.1 identical=True err_vs_ort=8.4e-07 flags=['0x0']
+resnet18 T=4 total 125.5->124.9 ms (+0.5%) conv_other 23.9->23.1 identical=True err_vs_ort=8.4e-07 flags=['0x0']
+resnet34 T=1 total 467.5->465.1 ms (+0.5%) conv_other 77.3->75.4 identical=True err_vs_ort=1.2e-06 flags=['0x0']
+resnet34 T=4 total 225.1->224.3 ms (+0.3%) conv_other 23.8->23.0 identical=True err_vs_ort=1.2e-06 flags=['0x0']
+mobilenet_v2 T=1 total 139.1->143.4 ms (-3.1%) conv_other 92.6->93.3 identical=True err_vs_ort=3.6e-06 flags=['0x0']
+mobilenet_v2 T=4 total 80.0->79.7 ms (+0.4%) conv_other 38.6->38.4 identical=True err_vs_ort=3.6e-06 flags=['0x0']

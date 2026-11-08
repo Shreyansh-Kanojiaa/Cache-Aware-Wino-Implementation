@@ -1,0 +1,26 @@
+xnnpack=52fd02e;ncnn=1.0.20261020
+mobilenet_v2 T=4 onnxruntime median=51.7ms err=0.00e+00
+mobilenet_v2 T=4 c_v5_batched median=94.8ms err=3.63e-06
+mobilenet_v2 T=4 c_direct_packed median=94.3ms err=3.63e-06
+mobilenet_v2 T=4 xnnpack median=35.7ms err=5.77e-06
+mobilenet_v2 T=4 ncnn median=60.2ms err=2.37e-04
+mobilenet_v2 T=4 ncnn_no_winograd median=61.4ms err=2.37e-04
+mobilenet_v2 T=1 onnxruntime median=101.1ms err=0.00e+00
+mobilenet_v2 T=1 c_v5_batched median=209.4ms err=3.40e-06
+mobilenet_v2 T=1 c_direct_packed median=209.4ms err=3.40e-06
+mobilenet_v2 T=1 xnnpack median=71.2ms err=5.74e-06
+mobilenet_v2 T=1 ncnn median=88.5ms err=2.37e-04
+mobilenet_v2 T=1 ncnn_no_winograd median=88.8ms err=2.37e-04
+yolov8n T=4 onnxruntime median=531.6ms err=0.00e+00
+yolov8n T=4 c_v5_batched median=463.8ms err=4.31e-06
+yolov8n T=4 c_direct_packed median=499.7ms err=2.82e-06
+yolov8n T=4 xnnpack median=506.6ms err=2.82e-06
+yolov8n T=4 ncnn median=374.3ms err=8.83e-06
+yolov8n T=4 ncnn_no_winograd median=464.9ms err=2.70e-06
+yolov8n T=1 onnxruntime median=1148.6ms err=0.00e+00
+yolov8n T=1 c_v5_batched median=1253.2ms err=4.40e-06
+yolov8n T=1 c_direct_packed median=1532.9ms err=2.82e-06
+yolov8n T=1 xnnpack median=1039.0ms err=2.76e-06
+yolov8n T=1 ncnn median=668.0ms err=8.83e-06
+yolov8n T=1 ncnn_no_winograd median=984.1ms err=2.57e-06
+Summary: summary/harness/engine_comparison.csv

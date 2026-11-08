@@ -1,0 +1,14 @@
+mobilenet_v2 T=1 base=143.1 new=122.1 (-14.7%, p=4e-21) new_norecycle=119.4 (-16.6%, p=4e-19)
+mobilenet_v2 T=4 base=79.5 new=42.3 (-46.8%, p=4e-21) new_norecycle=43.5 (-45.3%, p=4e-21)
+yolov8n T=1 base=922.3 new=911.0 (-1.2%, p=5e-21) new_norecycle=894.7 (-3.0%, p=4e-21)
+yolov8n T=4 base=404.9 new=372.1 (-8.1%, p=4e-21) new_norecycle=370.2 (-8.6%, p=4e-21)
+resnet18 T=1 base=257.9 new=255.7 (-0.9%, p=4e-06) new_norecycle=257.2 (-0.3%, p=0.7)
+resnet18 T=4 base=125.7 new=123.1 (-2.1%, p=1e-18) new_norecycle=123.6 (-1.7%, p=4e-18)
+alexnet T=1 base=181.6 new=180.1 (-0.8%, p=1e-16) new_norecycle=180.6 (-0.6%, p=1e-15)
+alexnet T=4 base=105.4 new=104.5 (-0.8%, p=4e-10) new_norecycle=104.3 (-1.0%, p=6e-15)
+resnet34 T=1 base=466.1 new=465.1 (-0.2%, p=0.005) new_norecycle=470.7 (+1.0%, p=4e-21)
+resnet34 T=4 base=227.4 new=224.4 (-1.3%, p=1e-08) new_norecycle=225.3 (-0.9%, p=2e-07)
+vgg16 T=1 base=1575.8 new=1634.5 (+3.7%, p=4e-21) new_norecycle=1622.1 (+2.9%, p=4e-21)
+vgg16 T=4 base=748.0 new=760.8 (+1.7%, p=3e-09) new_norecycle=763.6 (+2.1%, p=6e-11)
+done
+rc=0

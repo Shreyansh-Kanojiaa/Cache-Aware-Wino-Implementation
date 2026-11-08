@@ -1,0 +1,92 @@
+python3 benchmarks/rpi4_adaptive_m_sweep.py --runs 30 --warmup 10
+[T4] RPi4 Adaptive-m Sweep
+     Platform: Linux / 
+     L1D: 32768B, L2: 1048576B
+     Configs: 7, m values: [2, 4, 6], Runs: 30, Threads: 4
+
+  Config (16,32):
+    Adaptive policy selects: F(2,3) (m=2), WS=18560B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=0.16ms, CI95=±0.00ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=0.16ms, CI95=±0.00ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=0.21ms, CI95=±0.01ms
+    Empirical best: m=2 (0.16ms)
+    Policy selected: m=2
+    Match: YES ✓
+
+  Config (32,16):
+    Adaptive policy selects: F(2,3) (m=2), WS=35968B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=0.16ms, CI95=±0.00ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=0.17ms, CI95=±0.00ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=0.21ms, CI95=±0.00ms
+    Empirical best: m=2 (0.16ms)
+    Policy selected: m=2
+    Match: YES ✓
+
+  Config (32,32):
+    Adaptive policy selects: F(2,3) (m=2), WS=35968B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=0.27ms, CI95=±0.00ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=0.27ms, CI95=±0.01ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=0.35ms, CI95=±0.00ms
+    Empirical best: m=2 (0.27ms)
+    Policy selected: m=2
+    Match: YES ✓
+
+  Config (32,64):
+    Adaptive policy selects: F(2,3) (m=2), WS=35968B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=0.48ms, CI95=±0.01ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=0.47ms, CI95=±0.00ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=0.64ms, CI95=±0.01ms
+    Empirical best: m=4 (0.47ms)
+    Policy selected: m=2
+    Match: NO ✗
+
+  Config (64,32):
+    Adaptive policy selects: F(2,3) (m=2), WS=70784B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=0.51ms, CI95=±0.01ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=0.50ms, CI95=±0.01ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=0.72ms, CI95=±0.01ms
+    Empirical best: m=4 (0.50ms)
+    Policy selected: m=2
+    Match: NO ✗
+
+  Config (64,64):
+    Adaptive policy selects: F(2,3) (m=2), WS=70784B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=0.85ms, CI95=±0.01ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=1.02ms, CI95=±0.02ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=1.38ms, CI95=±0.01ms
+    Empirical best: m=2 (0.85ms)
+    Policy selected: m=2
+    Match: YES ✓
+
+  Config (128,128):
+    Adaptive policy selects: F(2,3) (m=2), WS=140416B
+    Running m=2 (F(2,3), tile_dim=4)...
+      mean=4.97ms, CI95=±0.02ms
+    Running m=4 (F(4,3), tile_dim=6)...
+      mean=4.65ms, CI95=±0.07ms
+    Running m=6 (F(6,3), tile_dim=8)...
+      mean=6.37ms, CI95=±0.20ms
+    Empirical best: m=4 (4.65ms)
+    Policy selected: m=2
+    Match: NO ✗
+
+[T4] Raw: raw_logs/harness/rpi4_adaptive_m_sweep.csv
+[T4] Verification summary written to summary/harness/rpi4_adaptive_m_verification.csv

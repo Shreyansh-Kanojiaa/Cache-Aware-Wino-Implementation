@@ -1,0 +1,8 @@
+alexnet T=4 total 106.4->105.4 ms (+0.9% saved) conv3x3 20.4->19.6 identical_output=True flags=['0x0']
+alexnet T=1 total 196.5->195.6 ms (+0.5% saved) conv3x3 62.5->61.8 identical_output=True flags=['0x0']
+resnet18 T=4 total 131.2->130.4 ms (+0.6% saved) conv3x3 92.4->91.5 identical_output=True flags=['0x0']
+resnet18 T=1 total 348.2->341.5 ms (+1.9% saved) conv3x3 243.9->237.3 identical_output=True flags=['0x0']
+resnet34 T=4 total 234.3->234.5 ms (-0.1% saved) conv3x3 191.1->190.8 identical_output=True flags=['0x0']
+resnet34 T=1 total 628.6->640.1 ms (-1.8% saved) conv3x3 520.0->531.3 identical_output=True flags=['0x0']
+vgg16 T=4 total 862.6->848.7 ms (+1.6% saved) conv3x3 645.0->630.6 identical_output=True flags=['0x0']
+vgg16 T=1 total 2287.2->2231.7 ms (+2.4% saved) conv3x3 2049.6->1996.5 identical_output=True flags=['0x0']
