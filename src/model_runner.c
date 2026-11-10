@@ -31,6 +31,10 @@ typedef struct {
     float* pad;         /* zero-padded input, conv only */
     const float* w;     /* gemm weights */
     const float* bias;
+    float* pw;          /* depthwise only: a fused 1x1 expansion before it (see fuse_pw_dw) */
+    const float* pw_bias;
+    float pw_lo, pw_hi;
+    int pw_cin;
 } Op;
 
 #define MAX_TENSORS 256
@@ -45,6 +49,7 @@ static int g_fc_fp16;  /* store fully connected weights as 16-bit floats, as ncn
 static int g_outs[MAX_OUTPUTS];
 static int g_n_outs;
 static int g_recycle = 1;
+static int g_fuse_pwdw = 784;          /* fuse 1x1 + depthwise pairs with at least this many pixels, 0 never */
 static int g_fuse_act = 1;             /* apply ReLU, ReLU6 and SiLU in the conv's own output pass */              /* share activation buffers between tensors whose lifetimes don't overlap */
 static int g_alias[MAX_TENSORS];       /* SPLIT halves: source tensor + 1, 0 if none */
 static size_t g_alias_off[MAX_TENSORS];
@@ -218,7 +223,11 @@ static void run_conv(Op* o, int T) {
      * they can't do is left for one pass afterwards. */
     float lo = o->act == 1 ? o->lo : -INFINITY, hi = o->act == 1 ? o->hi : INFINITY;
     int done = 0;
-    if (o->depthwise) {
+    if (o->pw) {
+        float plo = o->pw_lo, phi = o->pw_hi;
+        conv2d_pw_dw(src, o->pw, o->pw_bias, plo, phi, o->w, o->bias, lo, hi, out->d, H, W, o->pw_cin, o->cin, o->s, T);
+        done = 1;
+    } else if (o->depthwise) {
         conv2d_depthwise(src, o->w, o->bias, out->d, H, W, o->cin, o->k, o->s, o->p, lo, hi, T);
         done = 1;
     } else if (o->k == 1 && o->s == 1 && o->p == 0) {
@@ -536,6 +545,37 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
     fclose(f);
 }
 
+/* A 1x1 expansion read only by the 3x3 depthwise right after it runs inside that op
+ * (conv2d_pw_dw), so its wide output is never stored: on large maps that tensor is
+ * memory traffic, not compute. */
+static void fuse_pw_dw(void) {
+    int readers[MAX_TENSORS] = {0}, n = 0;
+    for (int i = 0; i < g_nops; i++) {
+        Op* o = &g_ops[i];
+        if (o->type == OP_CONCAT) for (int j = 0; j < o->n_ins; j++) readers[o->ins[j]]++;
+        else readers[o->in]++;
+        if (o->type == OP_ADD) readers[o->in2]++;
+    }
+    for (int j = 0; j < g_n_outs; j++) readers[g_outs[j]]++;
+    for (int i = 0; i < g_nops; i++) {
+        Op* a = &g_ops[i], *b = &g_ops[i + 1];
+        if (g_fuse_pwdw && i + 1 < g_nops && a->type == OP_CONV && !a->depthwise && !a->use_v5 && a->k == 1 &&
+            a->s == 1 && a->p == 0 && a->act != 2 && b->type == OP_CONV && b->depthwise && b->k == 3 && b->p == 1 &&
+            b->s <= 2 && b->act != 2 && b->in == a->out && readers[a->out] == 1 && !g_alias[a->out] &&
+            g_t[a->in].h * g_t[a->in].w >= g_fuse_pwdw) {
+            b->pw = a->pack;
+            b->pw_bias = a->bias;
+            b->pw_lo = a->act == 1 ? a->lo : -INFINITY;
+            b->pw_hi = a->act == 1 ? a->hi : INFINITY;
+            b->pw_cin = a->cin;
+            b->in = a->in;
+            continue;   /* a is dropped */
+        }
+        g_ops[n++] = *a;
+    }
+    g_nops = n;
+}
+
 static float* read_floats(const char* path, size_t* count) {
     FILE* f = fopen(path, "rb");
     if (!f) die("cannot open float file");
@@ -573,6 +613,9 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--k3") == 0) g_k3 = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--pw-block") == 0) g_pw_block = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--pw-kc") == 0) g_pw_kc = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--dw-c4-max") == 0) g_dw_c4_max = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--fuse-pwdw") == 0) g_fuse_pwdw = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--fuse-px") == 0) g_fuse_px = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
@@ -583,6 +626,7 @@ int main(int argc, char** argv) {
     int in_id = -1;
     load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, &in_id);
     if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
+    fuse_pw_dw();
     size_t act_bytes = assign_buffers(in_id);
     fprintf(stderr, "activation memory: %.1f MB (recycle=%d)\n", act_bytes / 1e6, g_recycle);
 

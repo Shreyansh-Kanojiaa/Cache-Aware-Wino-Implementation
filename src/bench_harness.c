@@ -1634,86 +1634,173 @@ static inline void dw3_row(const float* r0, const float* r1, const float* r2, co
     }
 }
 
-/* 3x3, padding 1, stride 1 or 2. Each input row is copied once into a ring of 4 zero-
- * bordered rows, wide enough that every output vector, the last one included, reads
- * inside it: no scalar edge columns, which is most of a 7- or 14-wide row. Stride 1 makes
- * two output rows per pass, sharing the two input rows they both read. */
-static void dw3_p1(const float* input, const float* weights, const float* bias, float* output,
-                   int H, int W, int C, int s, float lo, float hi, int T) {
-    int Hout = (H - 1) / s + 1, Wout = (W - 1) / s + 1, Wv = (Wout + 3) / 4 * 4;
-    int Wq = (s == 1 ? Wv + 2 : 2 * Wv + 2);
-    if (Wq < W + 2) Wq = W + 2;
-    Wq = (Wq + 3) / 4 * 4;
-    #pragma omp parallel num_threads(T)
-    {
-        float* ring = v5_alloc((size_t)5 * Wq);   /* 4 rows, then a zero row for rows outside the input */
-        memset(ring, 0, (size_t)5 * Wq * sizeof(float));
-        const float* zero = ring + 4 * Wq;
-        #pragma omp for schedule(static)
-        for (int c = 0; c < C; c++) {
-            const float* plane = input + (size_t)c * H * W;
-            const float* f = weights + (size_t)c * 9;
-            float f0 = f[0], f1 = f[1], f2 = f[2], f3 = f[3], f4 = f[4], f5 = f[5], f6 = f[6], f7 = f[7], f8 = f[8];
-            float bc = bias ? bias[c] : 0.0f;
-            v4f vb = {bc, bc, bc, bc};
-            float* yc = output + (size_t)c * Hout * Wout;
-            int loaded = 0;   /* input rows below this are in the ring, row r in slot (r + 1) % 4 */
+/* 3x3, padding 1, stride 1 or 2, one channel, output rows [ho0, ho1). Input row r is at
+ * plane + (r - ra) * W, and rows from ra on are read as needed (rows outside the image
+ * read as zero). Each input row is copied once into a ring of 4 zero-bordered rows, wide
+ * enough that every output vector, the last one included, reads inside it: no scalar
+ * edge columns. Stride 1 makes two output rows per pass, sharing two input rows. */
+static int dw3_ring_width(int W, int s) {
+    int Wv = ((W - 1) / s + 1 + 3) / 4 * 4;
+    int Wq = s == 1 ? Wv + 2 : 2 * Wv + 2;
+    return ((Wq < W + 2 ? W + 2 : Wq) + 3) / 4 * 4;
+}
+
+/* ring: 5 * Wq floats, zeroed once: 4 row slots, then a zero row */
+static inline void dw3_rows(const float* plane, int ra, int H, int W, int s, const float* f, float bc,
+                            float lo, float hi, float* yc, int ho0, int ho1, float* ring, int Wq) {
+    int Wout = (W - 1) / s + 1;
+    const float* zero = ring + 4 * Wq;
+    float f0 = f[0], f1 = f[1], f2 = f[2], f3 = f[3], f4 = f[4], f5 = f[5], f6 = f[6], f7 = f[7], f8 = f[8];
+    v4f vb = {bc, bc, bc, bc};
+    int loaded = ho0 * s - 1 > ra ? ho0 * s - 1 : ra;   /* rows below this are in the ring, row r in slot (r + 1) % 4 */
 #define DW_ROW(r) ((r) < 0 || (r) >= H ? zero : ring + (size_t)(((r) + 1) & 3) * Wq)
 #define DW_LOAD(upto) for (; loaded <= (upto) && loaded < H; loaded++) \
-                memcpy(ring + (size_t)((loaded + 1) & 3) * Wq + 1, plane + (size_t)loaded * W, (size_t)W * sizeof(float));
+        memcpy(ring + (size_t)((loaded + 1) & 3) * Wq + 1, plane + (size_t)(loaded - ra) * W, (size_t)W * sizeof(float));
 #define DW_STORE(y, v) do { v4f v_ = clamp4(v, lo, hi); \
-                if (wo + 4 <= Wout) *(v4f*)((y) + wo) = v_; else for (int j = 0; wo + j < Wout; j++) (y)[wo + j] = v_[j]; } while (0)
-            if (s == 1) {
-                for (int ho = 0; ho < Hout; ho += 2) {
-                    DW_LOAD(ho + 2)
-                    const float* r0 = DW_ROW(ho - 1), *r1 = DW_ROW(ho), *r2 = DW_ROW(ho + 1), *r3 = DW_ROW(ho + 2);
-                    float* y0 = yc + (size_t)ho * Wout;
-                    float* y1 = ho + 1 < Hout ? y0 + Wout : NULL;
-                    for (int wo = 0; wo < Wout; wo += 4) {
-                        v4f a0 = *(const v4f*)(r0 + wo), a1 = *(const v4f*)(r0 + wo + 1), a2 = *(const v4f*)(r0 + wo + 2);
-                        v4f b0 = *(const v4f*)(r1 + wo), b1 = *(const v4f*)(r1 + wo + 1), b2 = *(const v4f*)(r1 + wo + 2);
-                        v4f c0 = *(const v4f*)(r2 + wo), c1 = *(const v4f*)(r2 + wo + 1), c2 = *(const v4f*)(r2 + wo + 2);
-                        v4f d0 = *(const v4f*)(r3 + wo), d1 = *(const v4f*)(r3 + wo + 1), d2 = *(const v4f*)(r3 + wo + 2);
-                        v4f u = vb + a0 * f0 + a1 * f1 + a2 * f2 + b0 * f3 + b1 * f4 + b2 * f5 + c0 * f6 + c1 * f7 + c2 * f8;
-                        v4f v = vb + b0 * f0 + b1 * f1 + b2 * f2 + c0 * f3 + c1 * f4 + c2 * f5 + d0 * f6 + d1 * f7 + d2 * f8;
-                        DW_STORE(y0, u);
-                        if (y1) DW_STORE(y1, v);
-                    }
-                }
-            } else {
-                for (int ho = 0; ho < Hout; ho++) {
-                    DW_LOAD(2 * ho + 1)
-                    const float* rows[3] = {DW_ROW(2 * ho - 1), DW_ROW(2 * ho), DW_ROW(2 * ho + 1)};
-                    float* y = yc + (size_t)ho * Wout;
-                    for (int wo = 0; wo < Wout; wo += 4) {
-                        v4f acc = vb;
-                        for (int r = 0; r < 3; r++) {
-                            const float* q = rows[r] + wo * 2;
-#if HAS_ARM_NEON
-                            /* deinterleaving loads: taps 0 and 1 for 4 pixels, then tap 2 from 2 floats on */
-                            float32x4x2_t a = vld2q_f32(q), c = vld2q_f32(q + 2);
-                            v4f evens = (v4f)a.val[0], odds = (v4f)a.val[1], thirds = (v4f)c.val[0];
-#else
-                            v4f evens = {q[0], q[2], q[4], q[6]}, odds = {q[1], q[3], q[5], q[7]}, thirds = {q[2], q[4], q[6], q[8]};
-#endif
-                            acc += evens * f[r * 3] + odds * f[r * 3 + 1] + thirds * f[r * 3 + 2];
-                        }
-                        DW_STORE(y, acc);
-                    }
-                }
+        if (wo + 4 <= Wout) *(v4f*)((y) + wo) = v_; else for (int j = 0; wo + j < Wout; j++) (y)[wo + j] = v_[j]; } while (0)
+    if (s == 1) {
+        for (int ho = ho0; ho < ho1; ho += 2) {
+            DW_LOAD(ho + 1 < ho1 ? ho + 2 : ho + 1)   /* a lone last row needs no row below it */
+            const float* r0 = DW_ROW(ho - 1), *r1 = DW_ROW(ho), *r2 = DW_ROW(ho + 1), *r3 = DW_ROW(ho + 2);
+            float* y0 = yc + (size_t)ho * Wout;
+            float* y1 = ho + 1 < ho1 ? y0 + Wout : NULL;
+            for (int wo = 0; wo < Wout; wo += 4) {
+                v4f a0 = *(const v4f*)(r0 + wo), a1 = *(const v4f*)(r0 + wo + 1), a2 = *(const v4f*)(r0 + wo + 2);
+                v4f b0 = *(const v4f*)(r1 + wo), b1 = *(const v4f*)(r1 + wo + 1), b2 = *(const v4f*)(r1 + wo + 2);
+                v4f c0 = *(const v4f*)(r2 + wo), c1 = *(const v4f*)(r2 + wo + 1), c2 = *(const v4f*)(r2 + wo + 2);
+                v4f d0 = *(const v4f*)(r3 + wo), d1 = *(const v4f*)(r3 + wo + 1), d2 = *(const v4f*)(r3 + wo + 2);
+                /* one chain per input row: 9 dependent multiply-adds would wait on latency */
+                v4f u = (vb + a0 * f0 + a1 * f1 + a2 * f2) + (b0 * f3 + b1 * f4 + b2 * f5) + (c0 * f6 + c1 * f7 + c2 * f8);
+                v4f v = (vb + b0 * f0 + b1 * f1 + b2 * f2) + (c0 * f3 + c1 * f4 + c2 * f5) + (d0 * f6 + d1 * f7 + d2 * f8);
+                DW_STORE(y0, u);
+                if (y1) DW_STORE(y1, v);
             }
+        }
+    } else {
+        for (int ho = ho0; ho < ho1; ho++) {
+            DW_LOAD(2 * ho + 1)
+            const float* r0 = DW_ROW(2 * ho - 1), *r1 = DW_ROW(2 * ho), *r2 = DW_ROW(2 * ho + 1);
+            float* y = yc + (size_t)ho * Wout;
+#if HAS_ARM_NEON
+            /* deinterleaving loads: taps 0 and 1 for 4 pixels, then tap 2 from 2 floats on */
+#define DW_S2(q, e, o, t) float32x4x2_t q##a = vld2q_f32(q), q##c = vld2q_f32(q + 2); \
+            v4f e = (v4f)q##a.val[0], o = (v4f)q##a.val[1], t = (v4f)q##c.val[0];
+#else
+#define DW_S2(q, e, o, t) v4f e = {q[0], q[2], q[4], q[6]}, o = {q[1], q[3], q[5], q[7]}, t = {q[2], q[4], q[6], q[8]};
+#endif
+            for (int wo = 0; wo < Wout; wo += 4) {
+                const float* q0 = r0 + wo * 2, *q1 = r1 + wo * 2, *q2 = r2 + wo * 2;
+                DW_S2(q0, a0, a1, a2)
+                DW_S2(q1, b0, b1, b2)
+                DW_S2(q2, c0, c1, c2)
+                v4f acc = (vb + a0 * f0 + a1 * f1 + a2 * f2) + (b0 * f3 + b1 * f4 + b2 * f5) + (c0 * f6 + c1 * f7 + c2 * f8);
+                DW_STORE(y, acc);
+            }
+#undef DW_S2
+        }
+    }
 #undef DW_ROW
 #undef DW_LOAD
 #undef DW_STORE
+}
+
+static void dw3_p1(const float* input, const float* weights, const float* bias, float* output,
+                   int H, int W, int C, int s, float lo, float hi, int T) {
+    int Hout = (H - 1) / s + 1, Wout = (W - 1) / s + 1, Wq = dw3_ring_width(W, s);
+    #pragma omp parallel num_threads(T)
+    {
+        float* ring = v5_alloc((size_t)5 * Wq);
+        memset(ring, 0, (size_t)5 * Wq * sizeof(float));
+        #pragma omp for schedule(static)
+        for (int c = 0; c < C; c++) {
+            dw3_rows(input + (size_t)c * H * W, 0, H, W, s, weights + (size_t)c * 9, bias ? bias[c] : 0.0f,
+                     lo, hi, output + (size_t)c * Hout * Wout, 0, Hout, ring, Wq);
         }
         free(ring);
     }
 }
 
+/* 4x4 transpose in place: a b c d become the columns */
+#define DW_TR4(a, b, c, d) do { \
+    v4f t0_ = __builtin_shufflevector(a, b, 0, 4, 1, 5), t1_ = __builtin_shufflevector(a, b, 2, 6, 3, 7); \
+    v4f t2_ = __builtin_shufflevector(c, d, 0, 4, 1, 5), t3_ = __builtin_shufflevector(c, d, 2, 6, 3, 7); \
+    a = __builtin_shufflevector(t0_, t2_, 0, 1, 4, 5); b = __builtin_shufflevector(t0_, t2_, 2, 3, 6, 7); \
+    c = __builtin_shufflevector(t1_, t3_, 0, 1, 4, 5); d = __builtin_shufflevector(t1_, t3_, 2, 3, 6, 7); } while (0)
+
+/* 3x3 padding 1 on small planes, 4 channels per vector: a row of 7 or 14 pixels leaves
+ * little for pixel vectors and every row pays fixed costs, so 4 channels are interleaved
+ * into one zero-bordered plane Q[h][w][4] and each output pixel is 9 multiply-adds with
+ * per-channel weight vectors, no edge cases. Transposes in and out keep NCHW outside. */
+static void dw3_c4(const float* input, const float* weights, const float* bias, float* output,
+                   int H, int W, int C, int s, float lo, float hi, int T) {
+    int Hout = (H - 1) / s + 1, Wout = (W - 1) / s + 1, Wp = W + 2;
+    size_t plane = (size_t)H * W, oplane = (size_t)Hout * Wout;
+    #pragma omp parallel num_threads(T)
+    {
+        float* Q = v5_alloc((size_t)(H + 2) * Wp * 4);
+        memset(Q, 0, (size_t)(H + 2) * Wp * 4 * sizeof(float));   /* the border stays zero */
+        #pragma omp for schedule(static)
+        for (int c0 = 0; c0 < C; c0 += 4) {
+            int nc = C - c0 < 4 ? C - c0 : 4;
+            for (int h = 0; h < H; h++) {
+                float* q = Q + ((size_t)(h + 1) * Wp + 1) * 4;
+                const float* x[4];
+                for (int j = 0; j < 4; j++) x[j] = input + (size_t)(c0 + (j < nc ? j : 0)) * plane + (size_t)h * W;
+                int w = 0;
+                for (; w + 4 <= W; w += 4) {
+                    v4f a = *(const v4f*)(x[0] + w), b = *(const v4f*)(x[1] + w);
+                    v4f c = *(const v4f*)(x[2] + w), d = *(const v4f*)(x[3] + w);
+                    DW_TR4(a, b, c, d);
+                    *(v4f*)(q + w * 4) = a; *(v4f*)(q + w * 4 + 4) = b;
+                    *(v4f*)(q + w * 4 + 8) = c; *(v4f*)(q + w * 4 + 12) = d;
+                }
+                for (; w < W; w++) for (int j = 0; j < 4; j++) q[w * 4 + j] = x[j][w];
+            }
+            v4f fk[9] = {}, vb = {};
+            for (int j = 0; j < 4; j++) {
+                int c = c0 + (j < nc ? j : 0);
+                for (int t = 0; t < 9; t++) fk[t][j] = weights[(size_t)c * 9 + t];
+                vb[j] = bias ? bias[c] : 0.0f;
+            }
+            float* y[4];
+            for (int j = 0; j < 4; j++) y[j] = output + (size_t)(c0 + j) * oplane;
+            for (int ho = 0; ho < Hout; ho++) {
+                const float* q0 = Q + (size_t)(ho * s) * Wp * 4, *q1 = q0 + Wp * 4, *q2 = q1 + Wp * 4;
+#define DW_PX(wo) ({ int o_ = (wo) * s * 4; \
+                (vb + *(const v4f*)(q0 + o_) * fk[0] + *(const v4f*)(q0 + o_ + 4) * fk[1] + *(const v4f*)(q0 + o_ + 8) * fk[2]) + \
+                (*(const v4f*)(q1 + o_) * fk[3] + *(const v4f*)(q1 + o_ + 4) * fk[4] + *(const v4f*)(q1 + o_ + 8) * fk[5]) + \
+                (*(const v4f*)(q2 + o_) * fk[6] + *(const v4f*)(q2 + o_ + 4) * fk[7] + *(const v4f*)(q2 + o_ + 8) * fk[8]); })
+                size_t ro = (size_t)ho * Wout;
+                int wo = 0;
+                for (; wo + 4 <= Wout; wo += 4) {
+                    v4f a = clamp4(DW_PX(wo), lo, hi), b = clamp4(DW_PX(wo + 1), lo, hi);
+                    v4f c = clamp4(DW_PX(wo + 2), lo, hi), d = clamp4(DW_PX(wo + 3), lo, hi);
+                    DW_TR4(a, b, c, d);
+                    *(v4f*)(y[0] + ro + wo) = a;
+                    if (nc > 1) *(v4f*)(y[1] + ro + wo) = b;
+                    if (nc > 2) *(v4f*)(y[2] + ro + wo) = c;
+                    if (nc > 3) *(v4f*)(y[3] + ro + wo) = d;
+                }
+                for (; wo < Wout; wo++) {
+                    v4f v = clamp4(DW_PX(wo), lo, hi);
+                    for (int j = 0; j < nc; j++) y[j][ro + wo] = v[j];
+                }
+#undef DW_PX
+            }
+        }
+        free(Q);
+    }
+}
+static int g_dw_c4_max = 14;   /* widest input plane that goes to dw3_c4 */
+
 /* weights: [C][k*k]. Reads outside the input count as zero (padding p), so no padded
  * copy is needed. bias (may be NULL) is added and the result clamped to [lo, hi]. */
 void conv2d_depthwise(const float* input, const float* weights, const float* bias, float* output,
                       int H, int W, int C, int k, int s, int p, float lo, float hi, int T) {
+    if (k == 3 && p == 1 && s <= 2 && W <= g_dw_c4_max) {
+        dw3_c4(input, weights, bias, output, H, W, C, s, lo, hi, T);
+        return;
+    }
     if (k == 3 && p == 1 && s <= 2) {
         dw3_p1(input, weights, bias, output, H, W, C, s, lo, hi, T);
         return;
@@ -1834,6 +1921,23 @@ static inline void pw_tile4(const float* restrict Wb, const float* restrict x, i
     }
 }
 
+/* Pixels [p0, p1) of nk planes (plane stride xs) into tile order, P[tile][ci][tile width]:
+ * 12-pixel tiles, then 4-pixel ones, the last zero padded. */
+static inline void pw_pack(const float* input, size_t xs, float* P, int p0, int p1, int nk) {
+    for (int ci = 0; ci < nk; ci++) {
+        const float* src = input + (size_t)ci * xs;
+        int p = p0;
+        for (; p + 12 <= p1; p += 12) {
+            float* d = P + (size_t)nk * (p - p0) + ci * 12;
+            *(v4f*)d = *(const v4f*)(src + p);
+            *(v4f*)(d + 4) = *(const v4f*)(src + p + 4);
+            *(v4f*)(d + 8) = *(const v4f*)(src + p + 8);
+        }
+        for (; p + 4 <= p1; p += 4) *(v4f*)(P + (size_t)nk * (p - p0) + ci * 4) = *(const v4f*)(src + p);
+        for (int j = 0; p < p1 && j < 4; j++) P[(size_t)nk * (p - p0) + ci * 4 + j] = p + j < p1 ? src[p + j] : 0.0f;
+    }
+}
+
 /* input [Cin][N_pix], output [Cout][N_pix]; bias may be NULL */
 void conv2d_pointwise(const float* input, const float* W_p, const float* bias, float lo, float hi,
                       float* output, int N_pix, int Cin, int Cout, int T) {
@@ -1869,18 +1973,7 @@ void conv2d_pointwise(const float* input, const float* W_p, const float* bias, f
                 int cb1 = (cc + 1) * cbs < ncb ? (cc + 1) * cbs : ncb;
                 for (int k0 = 0; k0 < Cin; k0 += kc) {
                     int nk = Cin - k0 < kc ? Cin - k0 : kc, last = k0 + nk == Cin;
-                    for (int ci = 0; (npass > 1 || b != packed) && ci < nk; ci++) {
-                        const float* src = input + (size_t)(k0 + ci) * N_pix;
-                        int p = p0;
-                        for (; p + 12 <= p1; p += 12) {
-                            float* d = P + (size_t)nk * (p - p0) + ci * 12;
-                            *(v4f*)d = *(const v4f*)(src + p);
-                            *(v4f*)(d + 4) = *(const v4f*)(src + p + 4);
-                            *(v4f*)(d + 8) = *(const v4f*)(src + p + 8);
-                        }
-                        for (; p + 4 <= p1; p += 4) *(v4f*)(P + (size_t)nk * (p - p0) + ci * 4) = *(const v4f*)(src + p);
-                        for (int j = 0; p < p1 && j < 4; j++) P[(size_t)nk * (p - p0) + ci * 4 + j] = p + j < p1 ? src[p + j] : 0.0f;
-                    }
+                    if (npass > 1 || b != packed) pw_pack(input + (size_t)k0 * N_pix, N_pix, P, p0, p1, nk);
                     packed = b;
                     float plo = last ? lo : -INFINITY, phi = last ? hi : INFINITY;
                     for (int cb = cc * cbs; cb < cb1; cb++) {
@@ -1900,6 +1993,65 @@ void conv2d_pointwise(const float* input, const float* W_p, const float* bias, f
             }
         }
         free(P);
+    }
+}
+
+/* 1x1 expansion straight into a 3x3 padding-1 depthwise, so the wide expanded tensor of
+ * an inverted residual block never goes out to memory. Threads take bands of output rows
+ * x groups of 8-channel blocks: a band's input rows (with the 1 or 2 halo rows the
+ * depthwise needs) are copied once, and each 8-channel slice of the expansion lands in a
+ * small buffer E that the depthwise reads right away. pbias/plo/phi belong to the 1x1,
+ * dw_b/lo/hi to the depthwise. */
+static int g_fuse_px = 1024;   /* expanded pixels per band, so E stays near L1 */
+void conv2d_pw_dw(const float* input, const float* W_p, const float* pbias, float plo, float phi,
+                  const float* dw_w, const float* dw_b, float lo, float hi,
+                  float* output, int H, int W, int Cin, int Cexp, int s, int T) {
+    int Hout = (H - 1) / s + 1, Wout = (W - 1) / s + 1, ncb = (Cexp + 7) / 8, Wq = dw3_ring_width(W, s);
+    int R = (g_fuse_px / W - 3) / s + 1;   /* output rows per band: (R - 1) * s + 3 input rows */
+    if (R < 1) R = 1;
+    if (R > Hout) R = Hout;
+    int nb = (Hout + R - 1) / R;
+    int cbs = ncb;
+    while (cbs > 1 && nb * ((ncb + cbs - 1) / cbs) < 2 * T) cbs = (cbs + 1) / 2;
+    int ncc = (ncb + cbs - 1) / cbs;
+    int max_np = ((R - 1) * s + 3) * W;
+    #pragma omp parallel num_threads(T)
+    {
+        float* P = v5_alloc((size_t)Cin * ((max_np + 3) / 4 * 4));
+        float* E = v5_alloc((size_t)8 * max_np);
+        float* ring = v5_alloc((size_t)5 * Wq);
+        memset(ring, 0, (size_t)5 * Wq * sizeof(float));
+        int packed = -1;
+        #pragma omp for collapse(2) schedule(static)
+        for (int b = 0; b < nb; b++) {
+            for (int cc = 0; cc < ncc; cc++) {
+                int ho0 = b * R, ho1 = ho0 + R < Hout ? ho0 + R : Hout;
+                int ra = ho0 * s - 1 > 0 ? ho0 * s - 1 : 0, rb = (ho1 - 1) * s + 2 < H ? (ho1 - 1) * s + 2 : H;
+                int p0 = ra * W, p1 = rb * W, np = p1 - p0;
+                if (b != packed) pw_pack(input, (size_t)H * W, P, p0, p1, Cin);
+                packed = b;
+                int cb1 = (cc + 1) * cbs < ncb ? (cc + 1) * cbs : ncb;
+                for (int cb = cc * cbs; cb < cb1; cb++) {
+                    float bb[8];
+                    int nco = Cexp - cb * 8 < 8 ? Cexp - cb * 8 : 8;
+                    for (int i = 0; i < 8; i++) bb[i] = pbias && i < nco ? pbias[cb * 8 + i] : 0.0f;
+                    const float* Wb = W_p + (size_t)cb * Cin * 8;
+                    int p = p0;
+                    for (; p + 12 <= p1; p += 12) pw_tile12(Wb, P + (size_t)Cin * (p - p0), Cin, E + (p - p0), np, bb, nco, 1, plo, phi);
+                    for (; p < p1; p += 4) {
+                        pw_tile4(Wb, P + (size_t)Cin * (p - p0), Cin, E + (p - p0), np, bb, nco, p1 - p < 4 ? p1 - p : 4, 1, plo, phi);
+                    }
+                    for (int i = 0; i < nco; i++) {
+                        int c = cb * 8 + i;
+                        dw3_rows(E + (size_t)i * np, ra, H, W, s, dw_w + (size_t)c * 9, dw_b ? dw_b[c] : 0.0f,
+                                 lo, hi, output + (size_t)c * Hout * Wout, ho0, ho1, ring, Wq);
+                    }
+                }
+            }
+        }
+        free(P);
+        free(E);
+        free(ring);
     }
 }
 
@@ -2199,7 +2351,9 @@ int run_harness_selftest(void) {
         free(din);
         /* the 3x3 padding-1 path on plane sizes that leave every kind of row tail */
         int szs[][2] = {{1, 1}, {2, 3}, {5, 4}, {7, 7}, {8, 9}, {14, 14}, {6, 13}};
-        for (int zi = 0; zi < 7; zi++) for (int s = 1; s <= 2; s++) for (int ti = 0; ti < 2; ti++) {
+        int saved_c4 = g_dw_c4_max;
+        for (int zi = 0; zi < 7; zi++) for (int s = 1; s <= 2; s++) for (int ti = 0; ti < 4; ti++) {
+            g_dw_c4_max = ti < 2 ? 0 : 1000;   /* both 3x3 paths */
             int h = szs[zi][0], w_ = szs[zi][1], c_n = 6, ho = (h - 1) / s + 1, wo = (w_ - 1) / s + 1;
             float* x = (float*)malloc((size_t)c_n * h * w_ * sizeof(float));
             float* y = (float*)malloc((size_t)c_n * ho * wo * sizeof(float));
@@ -2207,7 +2361,7 @@ int run_harness_selftest(void) {
             for (int i = 0; i < c_n * h * w_; i++) x[i] = (float)(i % 31 - 15) / 6.0f;
             for (int i = 0; i < 54; i++) f[i] = (float)(i % 7 - 3) / 2.0f;
             for (int i = 0; i < 6; i++) bs[i] = (float)i - 2.5f;
-            conv2d_depthwise(x, f, bs, y, h, w_, c_n, 3, s, 1, 0.0f, 6.0f, test_T_vals[ti]);
+            conv2d_depthwise(x, f, bs, y, h, w_, c_n, 3, s, 1, 0.0f, 6.0f, test_T_vals[ti % 2]);
             for (int c = 0; c < c_n; c++) for (int oy = 0; oy < ho; oy++) for (int ox = 0; ox < wo; ox++) {
                 float sum = bs[c];
                 for (int kh = 0; kh < 3; kh++) for (int kw = 0; kw < 3; kw++) {
@@ -2218,13 +2372,14 @@ int run_harness_selftest(void) {
                 float got = y[((size_t)c * ho + oy) * wo + ox];
                 if (fabsf(got - sum) > 1e-3f) {
                     fprintf(stderr, "FATAL: depthwise 3x3 p1 %dx%d s=%d T=%d at c=%d y=%d x=%d: %f vs %f\n",
-                            h, w_, s, test_T_vals[ti], c, oy, ox, got, sum);
+                            h, w_, s, test_T_vals[ti % 2], c, oy, ox, got, sum);
                     return 1;
                 }
             }
             free(x);
             free(y);
         }
+        g_dw_c4_max = saved_c4;
         printf("  depthwise OK (k 1-5, stride 1-3, padding 0-2, bias and clamp, both thread counts, 3x3 row tails)\n");
     }
 
@@ -2262,7 +2417,36 @@ int run_harness_selftest(void) {
         }
         g_pw_block = saved_pw;
         g_pw_kc = saved_kc;
-        printf("  pointwise OK (pixel and channel tails, input channel passes, bias and clamp, both thread counts)\n");
+
+        /* fused 1x1 + depthwise against the two run one after the other */
+        int fsz[][2] = {{1, 1}, {5, 7}, {9, 9}, {16, 13}, {23, 20}}, fpx[] = {1, 40, 4096};
+        int saved_fpx = g_fuse_px;
+        for (int zi = 0; zi < 5; zi++) for (int s = 1; s <= 2; s++) for (int ti = 0; ti < 2; ti++) for (int fi = 0; fi < 3; fi++) {
+            int h = fsz[zi][0], w_ = fsz[zi][1], ci_n = 5, ce = 13, ho = (h - 1) / s + 1, wo = (w_ - 1) / s + 1;
+            size_t n_in = (size_t)ci_n * h * w_, n_e = (size_t)ce * h * w_, n_o = (size_t)ce * ho * wo;
+            float* x = (float*)malloc(n_in * sizeof(float)), *e = (float*)malloc(n_e * sizeof(float));
+            float* ref = (float*)malloc(n_o * sizeof(float)), *got = (float*)malloc(n_o * sizeof(float));
+            float pw_w[13 * 5], pb[13], dww[13 * 9], db[13];
+            for (size_t i = 0; i < n_in; i++) x[i] = (float)((long long)(i % 19) - 9) / 4.0f;
+            for (int i = 0; i < 65; i++) pw_w[i] = (float)(i % 11 - 5) / 5.0f;
+            for (int i = 0; i < 13; i++) pb[i] = (float)(i % 3) - 1.0f, db[i] = (float)(i % 4) / 2.0f - 0.5f;
+            for (int i = 0; i < 117; i++) dww[i] = (float)(i % 7 - 3) / 3.0f;
+            float* W_p = dp_pack_weights(pw_w, ci_n, ce, 1);
+            conv2d_pointwise(x, W_p, pb, 0.0f, 6.0f, e, h * w_, ci_n, ce, 1);
+            conv2d_depthwise(e, dww, db, ref, h, w_, ce, 3, s, 1, 0.0f, 6.0f, 1);
+            g_fuse_px = fpx[fi];
+            conv2d_pw_dw(x, W_p, pb, 0.0f, 6.0f, dww, db, 0.0f, 6.0f, got, h, w_, ci_n, ce, s, test_T_vals[ti]);
+            for (size_t i = 0; i < n_o; i++) {
+                if (fabsf(got[i] - ref[i]) > 1e-4f) {
+                    fprintf(stderr, "FATAL: fused 1x1+depthwise %dx%d s=%d T=%d band px=%d at %zu: %f vs %f\n",
+                            h, w_, s, test_T_vals[ti], g_fuse_px, i, got[i], ref[i]);
+                    return 1;
+                }
+            }
+            free(x); free(e); free(ref); free(got); free(W_p);
+        }
+        g_fuse_px = saved_fpx;
+        printf("  pointwise OK (pixel and channel tails, input channel passes, bias and clamp, both thread counts, fused into depthwise)\n");
     }
 
     printf("  [PASSED] All variant path assertions and numerical tolerances validated.\n");
