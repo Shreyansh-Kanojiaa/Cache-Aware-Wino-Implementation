@@ -1025,12 +1025,14 @@ static float* dp_pack_weights(const float* weights, int Cin, int Cout, int k) {
     return W_p;
 }
 
+/* The kernels add to the accumulators in O, or start from zero when zero is set */
+#define DP_LD(p) (zero ? (v4f){0.0f, 0.0f, 0.0f, 0.0f} : *(const v4f*)(p))
 static inline void dp_kernel(const float* restrict W, const float* restrict P,
-                             float* restrict O, int ntaps) {
-    v4f a0 = *(const v4f*)(O), a1 = *(const v4f*)(O + 4);
-    v4f a2 = *(const v4f*)(O + 8), a3 = *(const v4f*)(O + 12);
-    v4f a4 = *(const v4f*)(O + 16), a5 = *(const v4f*)(O + 20);
-    v4f a6 = *(const v4f*)(O + 24), a7 = *(const v4f*)(O + 28);
+                             float* restrict O, int ntaps, int zero) {
+    v4f a0 = DP_LD(O), a1 = DP_LD(O + 4);
+    v4f a2 = DP_LD(O + 8), a3 = DP_LD(O + 12);
+    v4f a4 = DP_LD(O + 16), a5 = DP_LD(O + 20);
+    v4f a6 = DP_LD(O + 24), a7 = DP_LD(O + 28);
     for (int k = 0; k < ntaps; k++) {
         v4f p = *(const v4f*)P;
         v4f w0 = *(const v4f*)W;
@@ -1056,13 +1058,13 @@ static inline void dp_kernel(const float* restrict W, const float* restrict P,
  * separate groups, 12 when the three groups are interleaved in one stream. */
 static inline void dp_kernel3(const float* restrict W, const float* restrict P0, const float* restrict P1,
                               const float* restrict P2, float* restrict O0, float* restrict O1,
-                              float* restrict O2, int ntaps, int ps) {
-    v4f a0 = *(const v4f*)(O0), a1 = *(const v4f*)(O0 + 4), a2 = *(const v4f*)(O0 + 8), a3 = *(const v4f*)(O0 + 12);
-    v4f a4 = *(const v4f*)(O0 + 16), a5 = *(const v4f*)(O0 + 20), a6 = *(const v4f*)(O0 + 24), a7 = *(const v4f*)(O0 + 28);
-    v4f b0 = *(const v4f*)(O1), b1 = *(const v4f*)(O1 + 4), b2 = *(const v4f*)(O1 + 8), b3 = *(const v4f*)(O1 + 12);
-    v4f b4 = *(const v4f*)(O1 + 16), b5 = *(const v4f*)(O1 + 20), b6 = *(const v4f*)(O1 + 24), b7 = *(const v4f*)(O1 + 28);
-    v4f c0 = *(const v4f*)(O2), c1 = *(const v4f*)(O2 + 4), c2 = *(const v4f*)(O2 + 8), c3 = *(const v4f*)(O2 + 12);
-    v4f c4 = *(const v4f*)(O2 + 16), c5 = *(const v4f*)(O2 + 20), c6 = *(const v4f*)(O2 + 24), c7 = *(const v4f*)(O2 + 28);
+                              float* restrict O2, int ntaps, int ps, int zero) {
+    v4f a0 = DP_LD(O0), a1 = DP_LD(O0 + 4), a2 = DP_LD(O0 + 8), a3 = DP_LD(O0 + 12);
+    v4f a4 = DP_LD(O0 + 16), a5 = DP_LD(O0 + 20), a6 = DP_LD(O0 + 24), a7 = DP_LD(O0 + 28);
+    v4f b0 = DP_LD(O1), b1 = DP_LD(O1 + 4), b2 = DP_LD(O1 + 8), b3 = DP_LD(O1 + 12);
+    v4f b4 = DP_LD(O1 + 16), b5 = DP_LD(O1 + 20), b6 = DP_LD(O1 + 24), b7 = DP_LD(O1 + 28);
+    v4f c0 = DP_LD(O2), c1 = DP_LD(O2 + 4), c2 = DP_LD(O2 + 8), c3 = DP_LD(O2 + 12);
+    v4f c4 = DP_LD(O2 + 16), c5 = DP_LD(O2 + 20), c6 = DP_LD(O2 + 24), c7 = DP_LD(O2 + 28);
     for (int k = 0; k < ntaps; k++) {
         v4f w0 = *(const v4f*)W, w1 = *(const v4f*)(W + 4);
         v4f p = *(const v4f*)P0, q = *(const v4f*)P1, r = *(const v4f*)P2;
@@ -1085,11 +1087,11 @@ static int g_k3 = 1;   /* 0: one group at a time, for comparison */
 
 /* Two groups: 16 accumulators, for the groups left over after the blocks of three */
 static inline void dp_kernel2(const float* restrict W, const float* restrict P0, const float* restrict P1,
-                              float* restrict O0, float* restrict O1, int ntaps) {
-    v4f a0 = *(const v4f*)(O0), a1 = *(const v4f*)(O0 + 4), a2 = *(const v4f*)(O0 + 8), a3 = *(const v4f*)(O0 + 12);
-    v4f a4 = *(const v4f*)(O0 + 16), a5 = *(const v4f*)(O0 + 20), a6 = *(const v4f*)(O0 + 24), a7 = *(const v4f*)(O0 + 28);
-    v4f b0 = *(const v4f*)(O1), b1 = *(const v4f*)(O1 + 4), b2 = *(const v4f*)(O1 + 8), b3 = *(const v4f*)(O1 + 12);
-    v4f b4 = *(const v4f*)(O1 + 16), b5 = *(const v4f*)(O1 + 20), b6 = *(const v4f*)(O1 + 24), b7 = *(const v4f*)(O1 + 28);
+                              float* restrict O0, float* restrict O1, int ntaps, int zero) {
+    v4f a0 = DP_LD(O0), a1 = DP_LD(O0 + 4), a2 = DP_LD(O0 + 8), a3 = DP_LD(O0 + 12);
+    v4f a4 = DP_LD(O0 + 16), a5 = DP_LD(O0 + 20), a6 = DP_LD(O0 + 24), a7 = DP_LD(O0 + 28);
+    v4f b0 = DP_LD(O1), b1 = DP_LD(O1 + 4), b2 = DP_LD(O1 + 8), b3 = DP_LD(O1 + 12);
+    v4f b4 = DP_LD(O1 + 16), b5 = DP_LD(O1 + 20), b6 = DP_LD(O1 + 24), b7 = DP_LD(O1 + 28);
     for (int k = 0; k < ntaps; k++) {
         v4f w0 = *(const v4f*)W, w1 = *(const v4f*)(W + 4);
         v4f p = *(const v4f*)P0, q = *(const v4f*)P1;
@@ -1127,31 +1129,34 @@ static inline void dp_pack_patches(const float* input, float* P, int pix0, int n
         return;
     }
 #if HAS_ARM_NEON
-    if (k == 3 && s == 2) {
+    if ((k == 3 || k == 7) && s == 2) {
         /* 4 neighbouring pixels read every other value of a row, so one deinterleaving load
-         * gives taps 0 and 1 for all four, and a second one, 2 values on, gives tap 2. */
+         * gives taps kw and kw + 1 for all four (3x3 convs and the 7x7 ResNet stem). */
         for (int g = 0; g < ng; g++) {
             int pix = pix0 + g * 4, oh = pix / Wout, ow = pix % Wout, n = np - g * 4 < 4 ? np - g * 4 : 4;
-            float* gp = P + (size_t)g * nci * 9 * 4;
-            if (n == 4 && ow + 3 < Wout && 2 * ow + 10 <= W) {
+            float* gp = P + (size_t)g * nci * taps * 4;
+            if (n == 4 && ow + 3 < Wout && 2 * ow + k + 7 <= W) {
                 for (int ci = 0; ci < nci; ci++) {
                     const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oh * 2) * W + ow * 2;
-                    for (int kh = 0; kh < 3; kh++) {
-                        float32x4x2_t a = vld2q_f32(in + kh * W), c = vld2q_f32(in + kh * W + 2);
-                        float* d = gp + (size_t)(ci * 9 + kh * 3) * 4;
-                        vst1q_f32(d, a.val[0]);
-                        vst1q_f32(d + 4, a.val[1]);
-                        vst1q_f32(d + 8, c.val[0]);
+                    for (int kh = 0; kh < k; kh++) {
+                        float* d = gp + (size_t)(ci * taps + kh * k) * 4;
+                        int kw = 0;
+                        for (; kw + 1 < k; kw += 2) {
+                            float32x4x2_t a = vld2q_f32(in + kh * W + kw);
+                            vst1q_f32(d + kw * 4, a.val[0]);
+                            vst1q_f32(d + kw * 4 + 4, a.val[1]);
+                        }
+                        vst1q_f32(d + kw * 4, vld2q_f32(in + kh * W + kw).val[0]);
                     }
                 }
                 continue;
             }
-            memset(gp, 0, (size_t)nci * 9 * 4 * sizeof(float));   /* row edges and partial groups */
+            memset(gp, 0, (size_t)nci * taps * 4 * sizeof(float));   /* row edges and partial groups */
             for (int j = 0; j < n; j++) {
                 int pj = pix + j, oy = pj / Wout, ox = pj % Wout;
                 for (int ci = 0; ci < nci; ci++) {
                     const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oy * 2) * W + ox * 2;
-                    for (int t = 0; t < 9; t++) gp[(size_t)(ci * 9 + t) * 4 + j] = in[(t / 3) * W + t % 3];
+                    for (int t = 0; t < taps; t++) gp[(size_t)(ci * taps + t) * 4 + j] = in[(t / k) * W + t % k];
                 }
             }
         }
@@ -1257,7 +1262,7 @@ void conv2d_direct_packed_ep(
                 const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * taps) * 8;
                 for (int g = 0; g < ng; g++) {
                     dp_kernel(W_blk, P + ((size_t)g * Cin + ci0) * taps * 4,
-                              O + ((size_t)g * ncb + cb) * 32, nci * taps);
+                              O + ((size_t)g * ncb + cb) * 32, nci * taps, 0);
                 }
             }
         }
@@ -1291,10 +1296,10 @@ void conv2d_direct_packed_ep(
                     for (; g_k3 && g + 3 <= ng; g += 3) {
                         dp_kernel3(W_blk, P + g * gs, P + (g + 1) * gs, P + (g + 2) * gs,
                                    O + ((size_t)g * ncb + cb) * 32, O + ((size_t)(g + 1) * ncb + cb) * 32,
-                                   O + ((size_t)(g + 2) * ncb + cb) * 32, nci * taps, 4);
+                                   O + ((size_t)(g + 2) * ncb + cb) * 32, nci * taps, 4, 0);
                     }
                     for (; g < ng; g++) {
-                        dp_kernel(W_blk, P + (size_t)g * gs, O + ((size_t)g * ncb + cb) * 32, nci * taps);
+                        dp_kernel(W_blk, P + (size_t)g * gs, O + ((size_t)g * ncb + cb) * 32, nci * taps, 0);
                     }
                 }
             }
@@ -1394,15 +1399,15 @@ static inline void v6_multiply(const float* U_p, const float* V, float* Mb, int 
             const float* v = Vk + (size_t)g * 4 * Cin + ci0 * 12;
             size_t k0 = (size_t)g * alpha2 + k, k1 = k0 + alpha2, k2 = k1 + alpha2;
             dp_kernel3(U_blk, v, v + 4, v + 8,
-                       Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci, 12);
+                       Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci, 12, ci0 == 0);
         }
         /* 1-3 groups of 4 left, each its own stream */
         const float* v = Vk + (size_t)g * 4 * Cin + ci0 * 4;
         size_t gs = (size_t)4 * Cin, k0 = (size_t)g * alpha2 + k, k1 = k0 + alpha2, k2 = k1 + alpha2;
         if (ng - g == 3) dp_kernel3(U_blk, v, v + gs, v + 2 * gs, Mb + (k0 * ncb + cb) * 32,
-                                    Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci, 4);
-        else if (ng - g == 2) dp_kernel2(U_blk, v, v + gs, Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, nci);
-        else if (ng - g == 1) dp_kernel(U_blk, v, Mb + (k0 * ncb + cb) * 32, nci);
+                                    Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci, 4, ci0 == 0);
+        else if (ng - g == 2) dp_kernel2(U_blk, v, v + gs, Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, nci, ci0 == 0);
+        else if (ng - g == 1) dp_kernel(U_blk, v, Mb + (k0 * ncb + cb) * 32, nci, ci0 == 0);
     }
 }
 
@@ -1503,11 +1508,11 @@ static inline void at6_1d(const v4f* m, int s, v4f* o, int os) {
  * window crosses the bottom or right edge, so copy with zeros. */
 __attribute__((always_inline))
 static inline void v6_input_group(int m, const float* input, float* V, int rs, size_t kstride,
-                                  const int* h, const int* w, int mode, int H, int W, int Cin) {
+                                  const int* h, const int* w, int mode, int H, int W, int c0, int c1) {
     const int alpha = m + 2, a2 = alpha * alpha;
     size_t off[4];
     for (int j = 0; j < 4; j++) off[j] = (size_t)h[j] * W + w[j];
-    for (int ci = 0; ci < Cin; ci++) {
+    for (int ci = c0; ci < c1; ci++) {
         const float* plane = input + (size_t)ci * H * W;
         v4f d[64], t[64];
         if (m == 4 && mode == 2) {
@@ -1641,22 +1646,28 @@ static inline int v6_group_pos(int m, int t, int n, int Tw, int H, int W, int sp
     return inside;
 }
 
-/* Slots slot0.. hold tiles t0..t0+n-1 of a batch of ntot; slot0 is a multiple of 4. */
+/* Slots slot0.. hold tiles t0..t0+n-1 of a batch of ntot; slot0 is a multiple of 4. The NEON
+ * path does channels [cb, ce), 8 at a time across all the groups, so the three groups sharing
+ * a block of 12 fill each line of V while it is still in L1, instead of each group fetching it
+ * again. The scalar path does every channel, in the call with cb 0. */
 static void v6_input_tiles(int m, const float* input, float* V, int slot0, int t0, int n, int ntot,
-                           int H, int W, int Cin, int Tw) {
-    for (int i = 0; i < n; i += 4) {
+                           int H, int W, int Cin, int Tw, int cb, int ce) {
 #if HAS_ARM_NEON
-        if (m == 4 || m == 6) {
-            int h[4], w[4], rs;
-            int mode = v6_group_pos(m, t0 + i, n - i < 4 ? n - i : 4, Tw, H, W, m + 2, 20, h, w);
-            size_t base = v6_vbase(slot0 + i, ntot, Cin, &rs);
-            if (m == 4) v6_input_group(4, input, V + base, rs, v6_vfreq(ntot, Cin), h, w, mode, H, W, Cin);
-            else v6_input_group(6, input, V + base, rs, v6_vfreq(ntot, Cin), h, w, mode, H, W, Cin);
-            continue;
+    if (m == 4 || m == 6) {
+        for (int c0 = cb; c0 < ce; c0 += 8) {
+            int c1 = c0 + 8 < ce ? c0 + 8 : ce;
+            for (int i = 0; i < n; i += 4) {
+                int h[4], w[4], rs;
+                int mode = v6_group_pos(m, t0 + i, n - i < 4 ? n - i : 4, Tw, H, W, m + 2, 20, h, w);
+                size_t base = v6_vbase(slot0 + i, ntot, Cin, &rs);
+                if (m == 4) v6_input_group(4, input, V + base, rs, v6_vfreq(ntot, Cin), h, w, mode, H, W, c0, c1);
+                else v6_input_group(6, input, V + base, rs, v6_vfreq(ntot, Cin), h, w, mode, H, W, c0, c1);
+            }
         }
-#endif
-        for (int j = i; j < i + 4 && j < n; j++) v6_input_tile(m, input, V, slot0 + j, t0 + j, ntot, H, W, Cin, Tw);
+        return;
     }
+#endif
+    for (int j = 0; j < n && cb == 0; j++) v6_input_tile(m, input, V, slot0 + j, t0 + j, ntot, H, W, Cin, Tw);
 }
 
 static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, int t0, int nt,
@@ -1734,13 +1745,17 @@ void conv2d_v6_freq_ep(
         int ng = (N_tiles + 3) / 4;
         float* V = v5_scratch(0, alpha2 * v6_vfreq(N_tiles, Cin));
         float* Mb = v5_scratch(1, (size_t)ng * alpha2 * ncb * 32);
-        memset(Mb, 0, (size_t)ng * alpha2 * ncb * 32 * sizeof(float));
         #pragma omp parallel num_threads(T)
         {
             double q0 = get_time_ms();
-            #pragma omp for schedule(dynamic)
-            for (int g = 0; g < ng; g++) {
-                v6_input_tiles(m, input, V, g * 4, g * 4, N_tiles - g * 4 < 4 ? N_tiles - g * 4 : 4, N_tiles, H, W, Cin, Tw);
+            /* threads take whole blocks of 12 tiles, which share cache lines of V, and split channels */
+            int nblk = (N_tiles + 11) / 12;
+            #pragma omp for collapse(2) schedule(dynamic)
+            for (int b = 0; b < nblk; b++) {
+                for (int c = 0; c < Cin; c += 32) {
+                    v6_input_tiles(m, input, V, b * 12, b * 12, N_tiles - b * 12 < 12 ? N_tiles - b * 12 : 12, N_tiles,
+                                   H, W, Cin, Tw, c, c + 32 < Cin ? c + 32 : Cin);
+                }
             }
             double q1 = get_time_ms();
             #pragma omp for collapse(2) schedule(dynamic)
@@ -1772,11 +1787,9 @@ void conv2d_v6_freq_ep(
         for (int b = 0; b < n_batches; b++) {
             int t0 = b * batch;
             int nt = (t0 + batch <= N_tiles) ? batch : N_tiles - t0;
-            int ng = (nt + 3) / 4;
             double q0 = get_time_ms();
-            v6_input_tiles(m, input, V, 0, t0, nt, nt, H, W, Cin, Tw);
+            v6_input_tiles(m, input, V, 0, t0, nt, nt, H, W, Cin, Tw, 0, Cin);
             double q1 = get_time_ms();
-            memset(Mb, 0, (size_t)ng * alpha2 * ncb * 32 * sizeof(float));
             for (int k = 0; k < alpha2; k++) {
                 for (int cb = 0; cb < ncb; cb++) {
                     v6_multiply(U_p, V, Mb, k, cb, nt, alpha2, ncb, Cin);

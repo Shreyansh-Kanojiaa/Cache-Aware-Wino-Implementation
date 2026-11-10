@@ -307,6 +307,22 @@ static void run_op(Op* o, int T) {
                     int r0 = ho * o->s - o->p, c0 = wo * o->s - o->p;
                     int r1 = r0 + o->k < H ? r0 + o->k : H;
                     int c1 = c0 + o->k < W ? c0 + o->k : W;
+#if HAS_ARM_NEON
+                    /* stride 2, k 2 or 3, 4 windows inside the row: deinterleaving loads give
+                     * the even and odd columns of all four */
+                    if (o->s == 2 && (o->k == 2 || o->k == 3) && c0 >= 0 && wo + 4 <= Wo &&
+                        c0 + (o->k == 3 ? 10 : 8) <= W) {
+                        float32x4_t best = vdupq_n_f32(-INFINITY);
+                        for (int r = r0 < 0 ? 0 : r0; r < r1; r++) {
+                            float32x4x2_t a = vld2q_f32(p + (size_t)r * W + c0);
+                            best = vmaxq_f32(best, vmaxq_f32(a.val[0], a.val[1]));
+                            if (o->k == 3) best = vmaxq_f32(best, vld2q_f32(p + (size_t)r * W + c0 + 2).val[0]);
+                        }
+                        vst1q_f32(y + wo, best);
+                        wo += 3;
+                        continue;
+                    }
+#endif
                     float best = -INFINITY;
                     for (int r = r0 < 0 ? 0 : r0; r < r1; r++) {
                         for (int cc = c0 < 0 ? 0 : c0; cc < c1; cc++) {
