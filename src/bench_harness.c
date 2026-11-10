@@ -1005,7 +1005,6 @@ static int g_dp_kci = 32;      /* input channels per cache block at k=3; scaled 
 static int g_dp_block = 0;     /* output pixels per thread-owned block, 0: auto */
 static int g_stride = 1;
 static int g_ksize = 3;        /* direct_packed kernel size in the CLI benchmark */
-static double g_prof[3];  /* TEMP */
 
 /* Layout: W_p[co_block][ci][tap][co within block]. Cout is padded up to a multiple
  * of 8 with zero weights. */
@@ -1289,9 +1288,7 @@ void conv2d_direct_packed_ep(
             memset(O, 0, (size_t)ng * ncb * 32 * sizeof(float));
             for (int ci0 = 0; ci0 < Cin; ci0 += kci) {
                 int nci = (ci0 + kci <= Cin) ? kci : Cin - ci0;
-                double q0 = get_time_ms();
                 dp_pack_patches(input, P, pix0, np, ci0, nci, H, W, Wout, k, s);
-                g_prof[0] += get_time_ms() - q0;
                 for (int cb = 0; cb < ncb; cb++) {
                     const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * taps) * 8;
                     int g = 0;
@@ -1306,9 +1303,7 @@ void conv2d_direct_packed_ep(
                     }
                 }
             }
-            double q1 = get_time_ms();
             dp_write_pixels(O, output, pix0, np, ncb, Cout, Hout, Wout, bias, lo, hi);
-            g_prof[2] += get_time_ms() - q1;
         }
         free(P);
         free(O);
@@ -1703,7 +1698,7 @@ static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, in
  * are a multiple of 6 or 12, e.g. 128 x 24 x 24 and 384 x 12 x 12. With more threads F(4,3)'s
  * extra tiles split better (woof_wn_e at T=4: 13% slower with F(6,3)), so it stays.
  * ponytail: fitted on one board; refit the six constants for another. */
-static int v6_pick_m(int H, int W, int Cin, int Cout, int T) {
+__attribute__((unused)) static int v6_pick_m(int H, int W, int Cin, int Cout, int T) {
     if (T > 1) return 4;
     double best = 0.0;
     int best_m = 4;
@@ -1756,7 +1751,6 @@ void conv2d_v6_freq_ep(
         float* Mb = v5_scratch(1, (size_t)ng * alpha2 * ncb * 32);
         #pragma omp parallel num_threads(T)
         {
-            double q0 = get_time_ms();
             /* threads take whole blocks of 12 tiles, which share cache lines of V, and split channels */
             int nblk = (N_tiles + 11) / 12;
             #pragma omp for collapse(2) schedule(dynamic)
@@ -1766,21 +1760,17 @@ void conv2d_v6_freq_ep(
                                    H, W, Cin, Tw, c, c + 32 < Cin ? c + 32 : Cin);
                 }
             }
-            double q1 = get_time_ms();
             #pragma omp for collapse(2) schedule(dynamic)
             for (int k = 0; k < alpha2; k++) {
                 for (int cb = 0; cb < ncb; cb++) {
                     v6_multiply(U_p, V, Mb, k, cb, N_tiles, alpha2, ncb, Cin);
                 }
             }
-            double q2 = get_time_ms();
             #pragma omp for schedule(dynamic)
             for (int g = 0; g < ng; g++) {
                 v6_output_tiles(m, Mb, output, g * 4, g * 4, N_tiles - g * 4 < 4 ? N_tiles - g * 4 : 4,
                                 Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
             }
-            double q3 = get_time_ms();
-            if (omp_get_thread_num() == 0) { g_prof[0] += q1 - q0; g_prof[1] += q2 - q1; g_prof[2] += q3 - q2; }
         }
         return;
     }
@@ -1796,18 +1786,13 @@ void conv2d_v6_freq_ep(
         for (int b = 0; b < n_batches; b++) {
             int t0 = b * batch;
             int nt = (t0 + batch <= N_tiles) ? batch : N_tiles - t0;
-            double q0 = get_time_ms();
             v6_input_tiles(m, input, V, 0, t0, nt, nt, H, W, Cin, Tw, 0, Cin);
-            double q1 = get_time_ms();
             for (int k = 0; k < alpha2; k++) {
                 for (int cb = 0; cb < ncb; cb++) {
                     v6_multiply(U_p, V, Mb, k, cb, nt, alpha2, ncb, Cin);
                 }
             }
-            double q2 = get_time_ms();
             v6_output_tiles(m, Mb, output, 0, t0, nt, Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
-            double q3 = get_time_ms();
-            if (omp_get_thread_num() == 0) { g_prof[0] += q1 - q0; g_prof[1] += q2 - q1; g_prof[2] += q3 - q2; }
         }
     }
 }
@@ -2400,8 +2385,6 @@ int main(int argc, char** argv) {
                 board, git_hash, cell_id, variant, m, T, H, W, Cin, Cout,
                 "warm", r, wall_time_ms, implied_gflops, freq_mhz, temp_c, throttle, exec_path);
     }
-
-    if (getenv("PROF")) fprintf(stderr, "PROF in=%.2f mul=%.2f out=%.2f (ms/run, thread 0) freq=%ld\n", g_prof[0] / (runs + warmup), g_prof[1] / (runs + warmup), g_prof[2] / (runs + warmup), get_cpu_freq_mhz());
     if (out_csv) {
         fflush(fp);
         fsync(fileno(fp));
