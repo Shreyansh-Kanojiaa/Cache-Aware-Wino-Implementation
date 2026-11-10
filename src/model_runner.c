@@ -572,6 +572,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--dp-kci") == 0) g_dp_kci = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--k3") == 0) g_k3 = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--pw-block") == 0) g_pw_block = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--pw-kc") == 0) g_pw_kc = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
