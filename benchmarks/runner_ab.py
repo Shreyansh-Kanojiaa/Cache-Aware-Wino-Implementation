@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from benchmarks import whole_model as wm
 
 BASE = os.path.join(os.path.dirname(wm.RUNNER), "model_runner_base")
-CONFIGS = [("base", BASE, []), ("new", wm.RUNNER, [])]
+CONFIGS = [("base", BASE, []), ("new", wm.RUNNER, os.environ.get("NEW_ARGS", "").split())]  # NEW_ARGS: extra flags for the new build
 
 
 def main():

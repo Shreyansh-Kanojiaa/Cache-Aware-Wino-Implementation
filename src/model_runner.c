@@ -3,7 +3,8 @@
  *
  * Runs a whole model in C from a plan made by benchmarks/whole_model.py, using the
  * same graph and weights as the ONNX file. 3x3 stride-1 convs use --variant, depthwise
- * convs use conv2d_depthwise, and every other conv uses direct_packed.
+ * convs use conv2d_depthwise, 1x1 stride-1 convs conv2d_pointwise, and every other conv
+ * uses direct_packed.
  */
 #define main harness_main
 #include "bench_harness.c"
@@ -219,6 +220,9 @@ static void run_conv(Op* o, int T) {
     int done = 0;
     if (o->depthwise) {
         conv2d_depthwise(src, o->w, o->bias, out->d, H, W, o->cin, o->k, o->s, o->p, lo, hi, T);
+        done = 1;
+    } else if (o->k == 1 && o->s == 1 && o->p == 0) {
+        conv2d_pointwise(src, o->pack, o->bias, lo, hi, out->d, H * W, o->cin, o->cout, T);
         done = 1;
     } else if (o->use_v5) {
         if (g_v6) conv2d_v6_freq(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
@@ -567,6 +571,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--dp-block") == 0) g_dp_block = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--dp-kci") == 0) g_dp_kci = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--k3") == 0) g_k3 = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--pw-block") == 0) g_pw_block = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
