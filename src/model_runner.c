@@ -28,6 +28,9 @@ typedef struct {
     long woff, boff;
     float* pack;        /* packed conv weights */
     float* pad;         /* zero-padded input, conv only */
+    int pad_filled;     /* the conv before this one writes straight into pad */
+    float* out_pad;     /* write the output into the next conv's pad, with an out_p border */
+    int out_p;
     const float* w;     /* gemm weights */
     const float* bias;
 } Op;
@@ -200,11 +203,13 @@ static void run_conv(Op* o, int T) {
     double t0 = get_time_ms();
     if (o->p && !o->depthwise) {
         int Hp = H + 2 * o->p, Wp = W + 2 * o->p;
-        #pragma omp parallel for num_threads(T) schedule(static)
-        for (int ci = 0; ci < o->cin; ci++) {
-            for (int r = 0; r < H; r++) {
-                memcpy(o->pad + ((size_t)ci * Hp + r + o->p) * Wp + o->p,
-                       src + ((size_t)ci * H + r) * W, (size_t)W * sizeof(float));
+        if (!o->pad_filled) {
+            #pragma omp parallel for num_threads(T) schedule(static)
+            for (int ci = 0; ci < o->cin; ci++) {
+                for (int r = 0; r < H; r++) {
+                    memcpy(o->pad + ((size_t)ci * Hp + r + o->p) * Wp + o->p,
+                           src + ((size_t)ci * H + r) * W, (size_t)W * sizeof(float));
+                }
             }
         }
         src = o->pad;
@@ -223,7 +228,8 @@ static void run_conv(Op* o, int T) {
         done = 1;
     } else if (o->use_v5) {
         if (g_v6) {
-            conv2d_v6_freq_ep(o->m, src, o->pack, o->bias, lo, hi, out->d, H, W, o->cin, o->cout, T, &path);
+            conv2d_v6_freq_ep(o->m, src, o->pack, o->bias, lo, hi, o->out_pad ? o->out_pad : out->d, o->out_p,
+                              H, W, o->cin, o->cout, T, &path);
             done = 1;
         } else {
             conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
@@ -552,6 +558,35 @@ static void load_plan(const char* path, const float* weights, int use_v5, int T,
         if (++g_nops >= MAX_OPS) die("too many ops");
     }
     fclose(f);
+
+    /* A v6 conv whose output only feeds the next op, a padded conv, writes into that conv's
+     * padded input, which skips a copy of the whole tensor through memory. Nothing runs in
+     * between, so the pad buffer (shared by convs of one shape) can't be overwritten, except
+     * by the producer itself when it reads its own input from that buffer: then the
+     * consumer gets a buffer of its own. */
+    for (int i = 0; g_v6 && i + 1 < g_nops; i++) {
+        Op *o = &g_ops[i], *c = &g_ops[i + 1];
+        if (o->type != OP_CONV || !o->use_v5 || o->act == 2 || c->type != OP_CONV || c->depthwise || !c->p ||
+            c->in != o->out || g_alias[o->out])
+            continue;
+        int readers = 0;
+        for (int j = 0; j < g_nops; j++) {
+            Op* q = &g_ops[j];
+            readers += q->in == o->out || (q->type == OP_ADD && q->in2 == o->out);
+            for (int k = 0; q->type == OP_CONCAT && k < q->n_ins; k++) readers += q->ins[k] == o->out && k > 0;
+        }
+        for (int t = 0; t < MAX_TENSORS; t++) readers += g_alias[t] == o->out + 1;
+        for (int k = 0; k < g_n_outs; k++) readers += g_outs[k] == o->out;
+        if (readers != 1) continue;
+        if (c->pad == o->pad) {
+            size_t len = (size_t)c->cin * (g_t[c->in].h + 2 * c->p) * (g_t[c->in].w + 2 * c->p);
+            c->pad = v5_alloc(len);
+            memset(c->pad, 0, len * sizeof(float));
+        }
+        o->out_pad = c->pad;
+        o->out_p = c->p;
+        c->pad_filled = 1;
+    }
 }
 
 static float* read_floats(const char* path, size_t* count) {

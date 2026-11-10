@@ -1005,6 +1005,7 @@ static int g_dp_kci = 32;      /* input channels per cache block at k=3; scaled 
 static int g_dp_block = 0;     /* output pixels per thread-owned block, 0: auto */
 static int g_stride = 1;
 static int g_ksize = 3;        /* direct_packed kernel size in the CLI benchmark */
+static double g_prof[3];  /* TEMP */
 
 /* Layout: W_p[co_block][ci][tap][co within block]. Cout is padded up to a multiple
  * of 8 with zero weights. */
@@ -1288,7 +1289,9 @@ void conv2d_direct_packed_ep(
             memset(O, 0, (size_t)ng * ncb * 32 * sizeof(float));
             for (int ci0 = 0; ci0 < Cin; ci0 += kci) {
                 int nci = (ci0 + kci <= Cin) ? kci : Cin - ci0;
+                double q0 = get_time_ms();
                 dp_pack_patches(input, P, pix0, np, ci0, nci, H, W, Wout, k, s);
+                g_prof[0] += get_time_ms() - q0;
                 for (int cb = 0; cb < ncb; cb++) {
                     const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * taps) * 8;
                     int g = 0;
@@ -1303,7 +1306,9 @@ void conv2d_direct_packed_ep(
                     }
                 }
             }
+            double q1 = get_time_ms();
             dp_write_pixels(O, output, pix0, np, ncb, Cout, Hout, Wout, bias, lo, hi);
+            g_prof[2] += get_time_ms() - q1;
         }
         free(P);
         free(O);
@@ -1412,7 +1417,7 @@ static inline void v6_multiply(const float* U_p, const float* V, float* Mb, int 
 }
 
 static inline void v6_output_tile(int m, const float* Mb, float* output, int slot, int t,
-                                  int Hout, int Wout, int Cout, int Tw,
+                                  int Hout, int Wout, int Cout, int Tw, int ldo, size_t oplane,
                                   const float* bias, float lo, float hi) {
     int alpha2 = (m + 2) * (m + 2);
     int ncb = (Cout + 7) / 8;
@@ -1436,7 +1441,7 @@ static inline void v6_output_tile(int m, const float* Mb, float* output, int slo
                 int ow = w_start + c;
                 if (oh < Hout && ow < Wout) {
                     float v = y[r * m + c] + (bias ? bias[co] : 0.0f);
-                    output[(size_t)co * Hout * Wout + oh * Wout + ow] = v < lo ? lo : (v > hi ? hi : v);
+                    output[(size_t)co * oplane + (size_t)oh * ldo + ow] = v < lo ? lo : (v > hi ? hi : v);
                 }
             }
         }
@@ -1563,15 +1568,15 @@ static inline void v6_input_group(int m, const float* input, float* V, int rs, s
 }
 
 /* Output transform of 4 tiles (nj of them real) starting at h[j], w[j], with bias and clamp.
+ * Output rows are ldo floats apart and channels oplane.
  * mode 2 (m=4): neighbours in one row covering a whole 4 x 16 block. mode 1: every tile
  * inside, transposed and stored a row at a time. mode 0: a tile crosses the edge. */
 __attribute__((always_inline))
 static inline void v6_output_group(int m, const float* Mb, float* output, size_t group,
-                                   const int* h, const int* w, int nj, int mode, int Hout, int Wout,
+                                   const int* h, const int* w, int nj, int mode, int Hout, int Wout, int ldo, size_t oplane,
                                    int Cout, const float* bias, float lo, float hi) {
     const int alpha = m + 2, a2 = alpha * alpha;
     int ncb = (Cout + 7) / 8;
-    size_t plane = (size_t)Hout * Wout;
     for (int cb = 0; cb < ncb; cb++) {
         v4f mt[8][64];
         for (int k = 0; k < a2; k++) {
@@ -1600,12 +1605,12 @@ static inline void v6_output_group(int m, const float* Mb, float* output, size_t
             }
             float b = bias ? bias[co] : 0.0f;
             for (int q = 0; q < m * m; q++) y[q] = clamp4(y[q] + b, lo, hi);
-            float* out = output + co * plane;
+            float* out = output + co * oplane;
             if (m == 4 && mode == 2) {
                 for (int r = 0; r < 4; r++) {
                     float32x4x4_t v = {{(float32x4_t)y[r * 4], (float32x4_t)y[r * 4 + 1],
                                         (float32x4_t)y[r * 4 + 2], (float32x4_t)y[r * 4 + 3]}};
-                    vst4q_f32(out + (size_t)(h[0] + r) * Wout + w[0], v);
+                    vst4q_f32(out + (size_t)(h[0] + r) * ldo + w[0], v);
                 }
             } else if (mode == 1) {
                 /* columns 0-3, then the last 4 (m - 4 on; for m = 4 the same ones again) */
@@ -1614,14 +1619,14 @@ static inline void v6_output_group(int m, const float* Mb, float* output, size_t
                         float32x4_t v[4] = {(float32x4_t)y[r * m + c0], (float32x4_t)y[r * m + c0 + 1],
                                             (float32x4_t)y[r * m + c0 + 2], (float32x4_t)y[r * m + c0 + 3]};
                         V6_TR4(v[0], v[1], v[2], v[3]);
-                        for (int jj = 0; jj < nj; jj++) vst1q_f32(out + (size_t)(h[jj] + r) * Wout + w[jj] + c0, v[jj]);
+                        for (int jj = 0; jj < nj; jj++) vst1q_f32(out + (size_t)(h[jj] + r) * ldo + w[jj] + c0, v[jj]);
                     }
                 }
             } else {
                 for (int jj = 0; jj < nj; jj++) {
                     for (int r = 0; r < m && h[jj] + r < Hout; r++) {
                         for (int c = 0; c < m && w[jj] + c < Wout; c++) {
-                            out[(size_t)(h[jj] + r) * Wout + w[jj] + c] = y[r * m + c][jj];
+                            out[(size_t)(h[jj] + r) * ldo + w[jj] + c] = y[r * m + c][jj];
                         }
                     }
                 }
@@ -1670,8 +1675,8 @@ static void v6_input_tiles(int m, const float* input, float* V, int slot0, int t
     for (int j = 0; j < n && cb == 0; j++) v6_input_tile(m, input, V, slot0 + j, t0 + j, ntot, H, W, Cin, Tw);
 }
 
-static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, int t0, int nt,
-                            int Hout, int Wout, int Cout, int Tw, const float* bias, float lo, float hi) {
+static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, int t0, int nt, int Hout, int Wout,
+                            int Cout, int Tw, int ldo, size_t oplane, const float* bias, float lo, float hi) {
     int alpha2 = (m + 2) * (m + 2);
     for (int i = 0; i < nt; i += 4) {
 #if HAS_ARM_NEON
@@ -1679,14 +1684,14 @@ static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, in
             int h[4], w[4], nj = nt - i < 4 ? nt - i : 4;
             int mode = v6_group_pos(m, t0 + i, nj, Tw, Hout, Wout, m, 16, h, w);
             size_t group = (size_t)((slot0 + i) / 4) * alpha2;
-            if (m == 4) v6_output_group(4, Mb, output, group, h, w, nj, mode, Hout, Wout, Cout, bias, lo, hi);
-            else v6_output_group(6, Mb, output, group, h, w, nj, mode, Hout, Wout, Cout, bias, lo, hi);
+            if (m == 4) v6_output_group(4, Mb, output, group, h, w, nj, mode, Hout, Wout, ldo, oplane, Cout, bias, lo, hi);
+            else v6_output_group(6, Mb, output, group, h, w, nj, mode, Hout, Wout, ldo, oplane, Cout, bias, lo, hi);
             continue;
         }
 #endif
         (void)alpha2;
         for (int j = i; j < i + 4 && j < nt; j++)
-            v6_output_tile(m, Mb, output, slot0 + j, t0 + j, Hout, Wout, Cout, Tw, bias, lo, hi);
+            v6_output_tile(m, Mb, output, slot0 + j, t0 + j, Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
     }
 }
 
@@ -1712,14 +1717,15 @@ static int v6_pick_m(int H, int W, int Cin, int Cout, int T) {
     return best_m;
 }
 
-static double g_prof[3];  /* TEMP */
-/* bias (may be NULL) is added and the result clamped to [lo, hi] as tiles are written */
+/* bias (may be NULL) is added and the result clamped to [lo, hi] as tiles are written. With
+ * opad > 0, output is a buffer with an opad-wide border (the next conv's padded input) and
+ * only its interior is written. */
 void conv2d_v6_freq_ep(
     int m,
     const float* input,
     const float* U_p,
     const float* bias, float lo, float hi,
-    float* output,
+    float* output, int opad,
     int H, int W,
     int Cin, int Cout,
     int T,
@@ -1733,6 +1739,9 @@ void conv2d_v6_freq_ep(
     int Th = (Hout + m - 1) / m;
     int Tw = (Wout + m - 1) / m;
     int N_tiles = Th * Tw;
+    int ldo = Wout + 2 * opad;
+    size_t oplane = (size_t)ldo * (Hout + 2 * opad);
+    output += (size_t)opad * ldo + opad;
     size_t table_bytes = (size_t)Cin * Cout * alpha2 * sizeof(float);
     /* One thread: one block of 12 tiles keeps V and Mb in cache. More threads: bigger
      * batches, so layers with few tiles share one batch instead of leaving threads idle.
@@ -1768,7 +1777,7 @@ void conv2d_v6_freq_ep(
             #pragma omp for schedule(dynamic)
             for (int g = 0; g < ng; g++) {
                 v6_output_tiles(m, Mb, output, g * 4, g * 4, N_tiles - g * 4 < 4 ? N_tiles - g * 4 : 4,
-                                Hout, Wout, Cout, Tw, bias, lo, hi);
+                                Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
             }
             double q3 = get_time_ms();
             if (omp_get_thread_num() == 0) { g_prof[0] += q1 - q0; g_prof[1] += q2 - q1; g_prof[2] += q3 - q2; }
@@ -1796,7 +1805,7 @@ void conv2d_v6_freq_ep(
                 }
             }
             double q2 = get_time_ms();
-            v6_output_tiles(m, Mb, output, 0, t0, nt, Hout, Wout, Cout, Tw, bias, lo, hi);
+            v6_output_tiles(m, Mb, output, 0, t0, nt, Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
             double q3 = get_time_ms();
             if (omp_get_thread_num() == 0) { g_prof[0] += q1 - q0; g_prof[1] += q2 - q1; g_prof[2] += q3 - q2; }
         }
@@ -1805,7 +1814,7 @@ void conv2d_v6_freq_ep(
 
 void conv2d_v6_freq(int m, const float* input, const float* U_p, float* output, int H, int W,
                     int Cin, int Cout, int T, const char** executed_path) {
-    conv2d_v6_freq_ep(m, input, U_p, NULL, -INFINITY, INFINITY, output, H, W, Cin, Cout, T, executed_path);
+    conv2d_v6_freq_ep(m, input, U_p, NULL, -INFINITY, INFINITY, output, 0, H, W, Cin, Cout, T, executed_path);
 }
 
 /* -------------------------------------------------------------------------
@@ -2104,12 +2113,23 @@ int run_harness_selftest(void) {
             for (int ti = 0; ti < 2; ti++) for (int bi = 0; bi < 4; bi++) {
                 g_v5_batch = batches[bi];
                 memset(out6, 0, o6 * sizeof(float));
-                conv2d_v6_freq_ep(m6, in6, U_p, b6, lo6, hi6, out6, h6, w6, ci6, co6, test_T_vals[ti], &path);
+                conv2d_v6_freq_ep(m6, in6, U_p, b6, lo6, hi6, out6, 0, h6, w6, ci6, co6, test_T_vals[ti], &path);
                 float max_err = 0.0f;
                 for (size_t i = 0; i < o6; i++) {
                     float err = fabsf(ref6[i] - out6[i]);
                     if (err > max_err) max_err = err;
                 }
+                /* into a buffer with a 1-wide border, which must stay zero */
+                size_t pp = (size_t)(ho6 + 2) * (wo6 + 2);
+                float* outp = (float*)calloc(co6 * pp, sizeof(float));
+                conv2d_v6_freq_ep(m6, in6, U_p, b6, lo6, hi6, outp, 1, h6, w6, ci6, co6, test_T_vals[ti], &path);
+                for (int co = 0; co < co6; co++) for (int y = 0; y < ho6 + 2; y++) for (int x = 0; x < wo6 + 2; x++) {
+                    int in_int = y >= 1 && y <= ho6 && x >= 1 && x <= wo6;
+                    float want = in_int ? ref6[((size_t)co * ho6 + y - 1) * wo6 + x - 1] : 0.0f;
+                    float err = fabsf(outp[co * pp + (size_t)y * (wo6 + 2) + x] - want);
+                    if (err > max_err) max_err = err;
+                }
+                free(outp);
                 if (max_err > 1e-3f) {
                     fprintf(stderr, "FATAL: v6_freq transforms m=%d %dx%d T=%d batch=%d (max_err=%.4e)\n",
                             m6, h6, w6, test_T_vals[ti], g_v5_batch, max_err);
