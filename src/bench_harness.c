@@ -1638,29 +1638,32 @@ static inline void dw3_row(const float* r0, const float* r1, const float* r2, co
  * plane + (r - ra) * W, and rows from ra on are read as needed (rows outside the image
  * read as zero). Each input row is copied once into a ring of 4 zero-bordered rows, wide
  * enough that every output vector, the last one included, reads inside it: no scalar
- * edge columns. Stride 1 makes two output rows per pass, sharing two input rows. */
+ * edge columns. Stride 1 makes two output rows per pass, sharing two input rows. Stride 2
+ * splits each row into even and odd columns as it is copied, so taps are plain loads:
+ * the A72 runs deinterleaving loads on the same pipes as the multiply-adds, which are
+ * the bottleneck here (one 4-wide multiply-add per cycle). For the same reason each
+ * output is one chain of multiply-adds, no extra adds. */
 static int dw3_ring_width(int W, int s) {
     int Wv = ((W - 1) / s + 1 + 3) / 4 * 4;
-    int Wq = s == 1 ? Wv + 2 : 2 * Wv + 2;
-    return ((Wq < W + 2 ? W + 2 : Wq) + 3) / 4 * 4;
+    if (s == 2) return 2 * (Wv + 4);   /* evens at [0, Wv + 4), odds after */
+    return ((Wv + 2 < W + 2 ? W + 2 : Wv + 2) + 3) / 4 * 4;
 }
 
 /* ring: 5 * Wq floats, zeroed once: 4 row slots, then a zero row */
 static inline void dw3_rows(const float* plane, int ra, int H, int W, int s, const float* f, float bc,
                             float lo, float hi, float* yc, int ho0, int ho1, float* ring, int Wq) {
-    int Wout = (W - 1) / s + 1;
+    int Wout = (W - 1) / s + 1, Wf = Wout / 4 * 4, Wh = Wq / 2;
     const float* zero = ring + 4 * Wq;
     float f0 = f[0], f1 = f[1], f2 = f[2], f3 = f[3], f4 = f[4], f5 = f[5], f6 = f[6], f7 = f[7], f8 = f[8];
     v4f vb = {bc, bc, bc, bc};
     int loaded = ho0 * s - 1 > ra ? ho0 * s - 1 : ra;   /* rows below this are in the ring, row r in slot (r + 1) % 4 */
 #define DW_ROW(r) ((r) < 0 || (r) >= H ? zero : ring + (size_t)(((r) + 1) & 3) * Wq)
-#define DW_LOAD(upto) for (; loaded <= (upto) && loaded < H; loaded++) \
-        memcpy(ring + (size_t)((loaded + 1) & 3) * Wq + 1, plane + (size_t)(loaded - ra) * W, (size_t)W * sizeof(float));
 #define DW_STORE(y, v) do { v4f v_ = clamp4(v, lo, hi); \
-        if (wo + 4 <= Wout) *(v4f*)((y) + wo) = v_; else for (int j = 0; wo + j < Wout; j++) (y)[wo + j] = v_[j]; } while (0)
+        if (wo < Wf) *(v4f*)((y) + wo) = v_; else for (int j = 0; wo + j < Wout; j++) (y)[wo + j] = v_[j]; } while (0)
     if (s == 1) {
         for (int ho = ho0; ho < ho1; ho += 2) {
-            DW_LOAD(ho + 1 < ho1 ? ho + 2 : ho + 1)   /* a lone last row needs no row below it */
+            for (int last = ho + 1 < ho1 ? ho + 2 : ho + 1; loaded <= last && loaded < H; loaded++)   /* a lone last row needs no row below */
+                memcpy(ring + (size_t)((loaded + 1) & 3) * Wq + 1, plane + (size_t)(loaded - ra) * W, (size_t)W * sizeof(float));
             const float* r0 = DW_ROW(ho - 1), *r1 = DW_ROW(ho), *r2 = DW_ROW(ho + 1), *r3 = DW_ROW(ho + 2);
             float* y0 = yc + (size_t)ho * Wout;
             float* y1 = ho + 1 < ho1 ? y0 + Wout : NULL;
@@ -1669,38 +1672,42 @@ static inline void dw3_rows(const float* plane, int ra, int H, int W, int s, con
                 v4f b0 = *(const v4f*)(r1 + wo), b1 = *(const v4f*)(r1 + wo + 1), b2 = *(const v4f*)(r1 + wo + 2);
                 v4f c0 = *(const v4f*)(r2 + wo), c1 = *(const v4f*)(r2 + wo + 1), c2 = *(const v4f*)(r2 + wo + 2);
                 v4f d0 = *(const v4f*)(r3 + wo), d1 = *(const v4f*)(r3 + wo + 1), d2 = *(const v4f*)(r3 + wo + 2);
-                /* one chain per input row: 9 dependent multiply-adds would wait on latency */
-                v4f u = (vb + a0 * f0 + a1 * f1 + a2 * f2) + (b0 * f3 + b1 * f4 + b2 * f5) + (c0 * f6 + c1 * f7 + c2 * f8);
-                v4f v = (vb + b0 * f0 + b1 * f1 + b2 * f2) + (c0 * f3 + c1 * f4 + c2 * f5) + (d0 * f6 + d1 * f7 + d2 * f8);
+                v4f u = vb + a0 * f0 + a1 * f1 + a2 * f2 + b0 * f3 + b1 * f4 + b2 * f5 + c0 * f6 + c1 * f7 + c2 * f8;
+                v4f v = vb + b0 * f0 + b1 * f1 + b2 * f2 + c0 * f3 + c1 * f4 + c2 * f5 + d0 * f6 + d1 * f7 + d2 * f8;
                 DW_STORE(y0, u);
                 if (y1) DW_STORE(y1, v);
             }
         }
     } else {
         for (int ho = ho0; ho < ho1; ho++) {
-            DW_LOAD(2 * ho + 1)
+            for (; loaded <= 2 * ho + 1 && loaded < H; loaded++) {
+                /* padded column j + 1 holds x[j]: evens e[i] = x[2i - 1], odds o[i] = x[2i] */
+                float* e = ring + (size_t)((loaded + 1) & 3) * Wq, *o = e + Wh;
+                const float* x = plane + (size_t)(loaded - ra) * W;
+                int i = 0;
+#if HAS_ARM_NEON
+                for (; 2 * i + 8 <= W; i += 4) {
+                    float32x4x2_t v = vld2q_f32(x + 2 * i);
+                    vst1q_f32(o + i, v.val[0]);
+                    vst1q_f32(e + i + 1, v.val[1]);
+                }
+#endif
+                for (; 2 * i < W; i++) {
+                    o[i] = x[2 * i];
+                    if (2 * i + 1 < W) e[i + 1] = x[2 * i + 1];
+                }
+            }
             const float* r0 = DW_ROW(2 * ho - 1), *r1 = DW_ROW(2 * ho), *r2 = DW_ROW(2 * ho + 1);
             float* y = yc + (size_t)ho * Wout;
-#if HAS_ARM_NEON
-            /* deinterleaving loads: taps 0 and 1 for 4 pixels, then tap 2 from 2 floats on */
-#define DW_S2(q, e, o, t) float32x4x2_t q##a = vld2q_f32(q), q##c = vld2q_f32(q + 2); \
-            v4f e = (v4f)q##a.val[0], o = (v4f)q##a.val[1], t = (v4f)q##c.val[0];
-#else
-#define DW_S2(q, e, o, t) v4f e = {q[0], q[2], q[4], q[6]}, o = {q[1], q[3], q[5], q[7]}, t = {q[2], q[4], q[6], q[8]};
-#endif
             for (int wo = 0; wo < Wout; wo += 4) {
-                const float* q0 = r0 + wo * 2, *q1 = r1 + wo * 2, *q2 = r2 + wo * 2;
-                DW_S2(q0, a0, a1, a2)
-                DW_S2(q1, b0, b1, b2)
-                DW_S2(q2, c0, c1, c2)
-                v4f acc = (vb + a0 * f0 + a1 * f1 + a2 * f2) + (b0 * f3 + b1 * f4 + b2 * f5) + (c0 * f6 + c1 * f7 + c2 * f8);
+                v4f acc = vb + *(const v4f*)(r0 + wo) * f0 + *(const v4f*)(r0 + Wh + wo) * f1 + *(const v4f*)(r0 + wo + 1) * f2
+                             + *(const v4f*)(r1 + wo) * f3 + *(const v4f*)(r1 + Wh + wo) * f4 + *(const v4f*)(r1 + wo + 1) * f5
+                             + *(const v4f*)(r2 + wo) * f6 + *(const v4f*)(r2 + Wh + wo) * f7 + *(const v4f*)(r2 + wo + 1) * f8;
                 DW_STORE(y, acc);
             }
-#undef DW_S2
         }
     }
 #undef DW_ROW
-#undef DW_LOAD
 #undef DW_STORE
 }
 
@@ -1767,9 +1774,9 @@ static void dw3_c4(const float* input, const float* weights, const float* bias, 
             for (int ho = 0; ho < Hout; ho++) {
                 const float* q0 = Q + (size_t)(ho * s) * Wp * 4, *q1 = q0 + Wp * 4, *q2 = q1 + Wp * 4;
 #define DW_PX(wo) ({ int o_ = (wo) * s * 4; \
-                (vb + *(const v4f*)(q0 + o_) * fk[0] + *(const v4f*)(q0 + o_ + 4) * fk[1] + *(const v4f*)(q0 + o_ + 8) * fk[2]) + \
-                (*(const v4f*)(q1 + o_) * fk[3] + *(const v4f*)(q1 + o_ + 4) * fk[4] + *(const v4f*)(q1 + o_ + 8) * fk[5]) + \
-                (*(const v4f*)(q2 + o_) * fk[6] + *(const v4f*)(q2 + o_ + 4) * fk[7] + *(const v4f*)(q2 + o_ + 8) * fk[8]); })
+                vb + *(const v4f*)(q0 + o_) * fk[0] + *(const v4f*)(q0 + o_ + 4) * fk[1] + *(const v4f*)(q0 + o_ + 8) * fk[2] + \
+                *(const v4f*)(q1 + o_) * fk[3] + *(const v4f*)(q1 + o_ + 4) * fk[4] + *(const v4f*)(q1 + o_ + 8) * fk[5] + \
+                *(const v4f*)(q2 + o_) * fk[6] + *(const v4f*)(q2 + o_ + 4) * fk[7] + *(const v4f*)(q2 + o_ + 8) * fk[8]; })
                 size_t ro = (size_t)ho * Wout;
                 int wo = 0;
                 for (; wo + 4 <= Wout; wo += 4) {
