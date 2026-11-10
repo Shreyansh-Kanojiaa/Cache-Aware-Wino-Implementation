@@ -39,6 +39,7 @@ static Op g_ops[MAX_OPS];
 static int g_nops;
 static double g_cat[N_CATS];
 static int g_v6;
+static int g_plan_m;   /* 1: v6 uses the plan's tile size instead of v6_pick_m */
 static int g_fc_fp16;  /* store fully connected weights as 16-bit floats, as ncnn does by default on Arm */
 #define MAX_OUTPUTS 8
 static int g_outs[MAX_OUTPUTS];
@@ -221,8 +222,12 @@ static void run_conv(Op* o, int T) {
         conv2d_depthwise(src, o->w, o->bias, out->d, H, W, o->cin, o->k, o->s, o->p, lo, hi, T);
         done = 1;
     } else if (o->use_v5) {
-        if (g_v6) conv2d_v6_freq(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
-        else conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
+        if (g_v6) {
+            conv2d_v6_freq_ep(o->m, src, o->pack, o->bias, lo, hi, out->d, H, W, o->cin, o->cout, T, &path);
+            done = 1;
+        } else {
+            conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
+        }
     } else {
         conv2d_direct_packed_ep(src, o->pack, o->bias, lo, hi, out->d, H, W, o->cin, o->cout, o->k, o->s, T, &path);
         done = 1;
@@ -418,7 +423,7 @@ static size_t assign_buffers(int in_id) {
     return total;
 }
 
-static void load_plan(const char* path, const float* weights, int use_v5, int* in_id) {
+static void load_plan(const char* path, const float* weights, int use_v5, int T, int* in_id) {
     FILE* f = fopen(path, "r");
     if (!f) die("cannot open plan");
     char word[32];
@@ -453,6 +458,7 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
             if (fscanf(f, "%d %d %d %d %d %d %d %d %ld %ld", &o->out, &o->in, &o->cin, &o->cout,
                        &o->k, &o->s, &o->p, &o->m, &o->woff, &o->boff) != 10) die("bad CONV");
             o->use_v5 = use_v5 && o->k == 3 && o->s == 1;
+            if (o->use_v5 && g_v6 && !g_plan_m) o->m = v6_pick_m(g_t[o->in].h + 2, g_t[o->in].w + 2, o->cin, o->cout, T);
             if (o->use_v5) {
                 int alpha = o->m + 2;
                 float* U = (float*)malloc((size_t)o->cout * o->cin * alpha * alpha * sizeof(float));
@@ -567,6 +573,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--dp-block") == 0) g_dp_block = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--dp-kci") == 0) g_dp_kci = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--k3") == 0) g_k3 = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--plan-m") == 0) g_plan_m = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
@@ -575,7 +582,7 @@ int main(int argc, char** argv) {
 
     float* weights = read_floats(weights_path, NULL);
     int in_id = -1;
-    load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, &in_id);
+    load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, T, &in_id);
     if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
     size_t act_bytes = assign_buffers(in_id);
     fprintf(stderr, "activation memory: %.1f MB (recycle=%d)\n", act_bytes / 1e6, g_recycle);
