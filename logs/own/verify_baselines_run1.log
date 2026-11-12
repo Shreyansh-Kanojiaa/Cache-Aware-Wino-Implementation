@@ -1,0 +1,40 @@
+# First run. Its "op(s) left on TFLite kernels" lines are invalid (the node list keeps replaced nodes); see verify_baselines_partitions.log for the corrected delegation check.
+ 16:45:48 up 6 min,  2 users,  load average: 0.00, 0.07, 0.06
+throttled=0x0
+LiteRT 2.3.0; standalone XNNPACK build: CMAKE_BUILD_TYPE:STRING=Release; CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG; CMAKE_C_FLAGS:STRING=; CMAKE_C_FLAGS_RELEASE:STRING=-O3 -DNDEBUG; XNNPACK_ENABLE_ARM_FP16_VECTOR:BOOL=ON; XNNPACK_ENABLE_ASSEMBLY:BOOL=ON
+
+== TFLite: nodes taken by the XNNPACK delegate
+mobilenet_v2: 1 delegate partition(s), 70 op(s) left on TFLite kernels ['ADD', 'CONV_2D', 'DEPTHWISE_CONV_2D', 'FULLY_CONNECTED', 'MEAN', 'PAD', 'RESHAPE']
+resnet18: 2 delegate partition(s), 37 op(s) left on TFLite kernels ['ADD', 'CONV_2D', 'FULLY_CONNECTED', 'MAX_POOL_2D', 'MEAN', 'PAD', 'PADV2', 'RESHAPE']
+resnet34: 2 delegate partition(s), 61 op(s) left on TFLite kernels ['ADD', 'CONV_2D', 'FULLY_CONNECTED', 'MAX_POOL_2D', 'MEAN', 'PAD', 'PADV2', 'RESHAPE']
+vgg16: 1 delegate partition(s), 26 op(s) left on TFLite kernels ['AVERAGE_POOL_2D', 'CONV_2D', 'FULLY_CONNECTED', 'MAX_POOL_2D', 'RELU', 'RESHAPE', 'TRANSPOSE']
+yolov8n: 11 delegate partition(s), 247 op(s) left on TFLite kernels ['ADD', 'CONCATENATION', 'CONV_2D', 'LOGISTIC', 'MAX_POOL_2D', 'MUL', 'PAD', 'RESIZE_NEAREST_NEIGHBOR', 'SLICE', 'TRANSPOSE']
+alexnet: 1 delegate partition(s), 17 op(s) left on TFLite kernels ['AVERAGE_POOL_2D', 'CONV_2D', 'FULLY_CONNECTED', 'MAX_POOL_2D', 'PAD', 'RELU', 'RESHAPE', 'TRANSPOSE']
+
+== Threads in use (median ms | OS threads during inference | CPU time / wall time)
+mobilenet_v2 T=1 tflite                  70.9 ms |   8 threads | cpu/wall 1.00
+mobilenet_v2 T=1 tflite_no_delegate     105.9 ms |   8 threads | cpu/wall 1.00
+mobilenet_v2 T=1 xnnpack                 72.1 ms |   1 threads | cpu/wall 0.94
+mobilenet_v2 T=1 ours                    74.1 ms |   1 threads | cpu/wall 0.99
+mobilenet_v2 T=4 tflite                  36.1 ms |  11 threads | cpu/wall 3.82
+mobilenet_v2 T=4 tflite_no_delegate      60.7 ms |  11 threads | cpu/wall 4.00
+mobilenet_v2 T=4 xnnpack                 37.2 ms |   4 threads | cpu/wall 3.21
+mobilenet_v2 T=4 ours                    30.1 ms |   4 threads | cpu/wall 3.37
+resnet18 T=1 tflite                 363.6 ms |   8 threads | cpu/wall 1.00
+resnet18 T=1 tflite_no_delegate     458.3 ms |   8 threads | cpu/wall 1.00
+resnet18 T=1 xnnpack                364.4 ms |   1 threads | cpu/wall 1.00
+resnet18 T=1 ours                   197.4 ms |   1 threads | cpu/wall 1.00
+resnet18 T=4 tflite                 261.0 ms |  11 threads | cpu/wall 3.95
+resnet18 T=4 tflite_no_delegate     304.3 ms |  11 threads | cpu/wall 3.75
+resnet18 T=4 xnnpack                267.3 ms |   4 threads | cpu/wall 3.61
+resnet18 T=4 ours                   106.3 ms |   4 threads | cpu/wall 2.16
+vgg16 T=1 tflite                2969.9 ms |   9 threads | cpu/wall 1.00
+vgg16 T=1 tflite_no_delegate    3253.3 ms |   8 threads | cpu/wall 1.02
+vgg16 T=1 xnnpack               3078.9 ms |   1 threads | cpu/wall 0.64
+vgg16 T=1 ours                  1091.5 ms |   1 threads | cpu/wall 0.56
+vgg16 T=4 tflite                2882.0 ms |  11 threads | cpu/wall 3.98
+vgg16 T=4 tflite_no_delegate    2365.4 ms |  11 threads | cpu/wall 3.75
+vgg16 T=4 xnnpack               2996.0 ms |   4 threads | cpu/wall 2.09
+vgg16 T=4 ours                   570.5 ms |   4 threads | cpu/wall 1.10
+
+[exited with code 0]

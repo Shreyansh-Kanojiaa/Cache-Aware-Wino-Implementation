@@ -1,0 +1,11 @@
+LiteRT 2.3.0; standalone XNNPACK build: CMAKE_BUILD_TYPE:STRING=Release; CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG; CMAKE_C_FLAGS:STRING=; CMAKE_C_FLAGS_RELEASE:STRING=-O3 -DNDEBUG; XNNPACK_ENABLE_ARM_FP16_VECTOR:BOOL=ON; XNNPACK_ENABLE_ASSEMBLY:BOOL=ON
+
+== TFLite: nodes taken by the XNNPACK delegate
+mobilenet_v2: 1 delegate partition(s)
+resnet18: 2 delegate partition(s)
+resnet34: 2 delegate partition(s)
+vgg16: 1 delegate partition(s)
+yolov8n: 11 delegate partition(s)
+alexnet: 1 delegate partition(s)
+
+== Threads in use (median ms | OS threads during inference | CPU time / wall time)
