@@ -1002,8 +1002,9 @@ void conv2d_v5_batched(
  * ------------------------------------------------------------------------- */
 /* ponytail: tuned on one RPi4 at T=4; pass --dp-kci and --dp-block for other boards. */
 static int g_dp_kci = 32;      /* input channels per cache block at k=3; scaled for other k */
-static int g_dp_block = 16;    /* output pixels per thread-owned block */
+static int g_dp_block = 0;     /* output pixels per thread-owned block, 0: auto */
 static int g_stride = 1;
+static int g_ksize = 3;        /* direct_packed kernel size in the CLI benchmark */
 
 /* Layout: W_p[co_block][ci][tap][co within block]. Cout is padded up to a multiple
  * of 8 with zero weights. */
@@ -1024,12 +1025,14 @@ static float* dp_pack_weights(const float* weights, int Cin, int Cout, int k) {
     return W_p;
 }
 
+/* The kernels add to the accumulators in O, or start from zero when zero is set */
+#define DP_LD(p) (zero ? (v4f){0.0f, 0.0f, 0.0f, 0.0f} : *(const v4f*)(p))
 static inline void dp_kernel(const float* restrict W, const float* restrict P,
-                             float* restrict O, int ntaps) {
-    v4f a0 = *(const v4f*)(O), a1 = *(const v4f*)(O + 4);
-    v4f a2 = *(const v4f*)(O + 8), a3 = *(const v4f*)(O + 12);
-    v4f a4 = *(const v4f*)(O + 16), a5 = *(const v4f*)(O + 20);
-    v4f a6 = *(const v4f*)(O + 24), a7 = *(const v4f*)(O + 28);
+                             float* restrict O, int ntaps, int zero) {
+    v4f a0 = DP_LD(O), a1 = DP_LD(O + 4);
+    v4f a2 = DP_LD(O + 8), a3 = DP_LD(O + 12);
+    v4f a4 = DP_LD(O + 16), a5 = DP_LD(O + 20);
+    v4f a6 = DP_LD(O + 24), a7 = DP_LD(O + 28);
     for (int k = 0; k < ntaps; k++) {
         v4f p = *(const v4f*)P;
         v4f w0 = *(const v4f*)W;
@@ -1051,16 +1054,17 @@ static inline void dp_kernel(const float* restrict W, const float* restrict P,
 
 /* Three 4-pixel groups at once: 8 outputs x 12 pixels in 24 accumulators. The A72's
  * multiply-add has ~7 cycles of latency on 2 pipes, so 8 accumulators (dp_kernel) can't keep
- * it busy; 24 can. Same layouts as dp_kernel: each group's P and O are separate. */
+ * it busy; 24 can. Same layouts as dp_kernel, but each P advances ps floats per step: 4 for
+ * separate groups, 12 when the three groups are interleaved in one stream. */
 static inline void dp_kernel3(const float* restrict W, const float* restrict P0, const float* restrict P1,
                               const float* restrict P2, float* restrict O0, float* restrict O1,
-                              float* restrict O2, int ntaps) {
-    v4f a0 = *(const v4f*)(O0), a1 = *(const v4f*)(O0 + 4), a2 = *(const v4f*)(O0 + 8), a3 = *(const v4f*)(O0 + 12);
-    v4f a4 = *(const v4f*)(O0 + 16), a5 = *(const v4f*)(O0 + 20), a6 = *(const v4f*)(O0 + 24), a7 = *(const v4f*)(O0 + 28);
-    v4f b0 = *(const v4f*)(O1), b1 = *(const v4f*)(O1 + 4), b2 = *(const v4f*)(O1 + 8), b3 = *(const v4f*)(O1 + 12);
-    v4f b4 = *(const v4f*)(O1 + 16), b5 = *(const v4f*)(O1 + 20), b6 = *(const v4f*)(O1 + 24), b7 = *(const v4f*)(O1 + 28);
-    v4f c0 = *(const v4f*)(O2), c1 = *(const v4f*)(O2 + 4), c2 = *(const v4f*)(O2 + 8), c3 = *(const v4f*)(O2 + 12);
-    v4f c4 = *(const v4f*)(O2 + 16), c5 = *(const v4f*)(O2 + 20), c6 = *(const v4f*)(O2 + 24), c7 = *(const v4f*)(O2 + 28);
+                              float* restrict O2, int ntaps, int ps, int zero) {
+    v4f a0 = DP_LD(O0), a1 = DP_LD(O0 + 4), a2 = DP_LD(O0 + 8), a3 = DP_LD(O0 + 12);
+    v4f a4 = DP_LD(O0 + 16), a5 = DP_LD(O0 + 20), a6 = DP_LD(O0 + 24), a7 = DP_LD(O0 + 28);
+    v4f b0 = DP_LD(O1), b1 = DP_LD(O1 + 4), b2 = DP_LD(O1 + 8), b3 = DP_LD(O1 + 12);
+    v4f b4 = DP_LD(O1 + 16), b5 = DP_LD(O1 + 20), b6 = DP_LD(O1 + 24), b7 = DP_LD(O1 + 28);
+    v4f c0 = DP_LD(O2), c1 = DP_LD(O2 + 4), c2 = DP_LD(O2 + 8), c3 = DP_LD(O2 + 12);
+    v4f c4 = DP_LD(O2 + 16), c5 = DP_LD(O2 + 20), c6 = DP_LD(O2 + 24), c7 = DP_LD(O2 + 28);
     for (int k = 0; k < ntaps; k++) {
         v4f w0 = *(const v4f*)W, w1 = *(const v4f*)(W + 4);
         v4f p = *(const v4f*)P0, q = *(const v4f*)P1, r = *(const v4f*)P2;
@@ -1070,7 +1074,7 @@ static inline void dp_kernel3(const float* restrict W, const float* restrict P0,
         b4 += w0 * q[2]; b5 += w1 * q[2]; b6 += w0 * q[3]; b7 += w1 * q[3];
         c0 += w0 * r[0]; c1 += w1 * r[0]; c2 += w0 * r[1]; c3 += w1 * r[1];
         c4 += w0 * r[2]; c5 += w1 * r[2]; c6 += w0 * r[3]; c7 += w1 * r[3];
-        W += 8; P0 += 4; P1 += 4; P2 += 4;
+        W += 8; P0 += ps; P1 += ps; P2 += ps;
     }
     *(v4f*)(O0) = a0; *(v4f*)(O0 + 4) = a1; *(v4f*)(O0 + 8) = a2; *(v4f*)(O0 + 12) = a3;
     *(v4f*)(O0 + 16) = a4; *(v4f*)(O0 + 20) = a5; *(v4f*)(O0 + 24) = a6; *(v4f*)(O0 + 28) = a7;
@@ -1080,6 +1084,28 @@ static inline void dp_kernel3(const float* restrict W, const float* restrict P0,
     *(v4f*)(O2 + 16) = c4; *(v4f*)(O2 + 20) = c5; *(v4f*)(O2 + 24) = c6; *(v4f*)(O2 + 28) = c7;
 }
 static int g_k3 = 1;   /* 0: one group at a time, for comparison */
+
+/* Two groups: 16 accumulators, for the groups left over after the blocks of three */
+static inline void dp_kernel2(const float* restrict W, const float* restrict P0, const float* restrict P1,
+                              float* restrict O0, float* restrict O1, int ntaps, int zero) {
+    v4f a0 = DP_LD(O0), a1 = DP_LD(O0 + 4), a2 = DP_LD(O0 + 8), a3 = DP_LD(O0 + 12);
+    v4f a4 = DP_LD(O0 + 16), a5 = DP_LD(O0 + 20), a6 = DP_LD(O0 + 24), a7 = DP_LD(O0 + 28);
+    v4f b0 = DP_LD(O1), b1 = DP_LD(O1 + 4), b2 = DP_LD(O1 + 8), b3 = DP_LD(O1 + 12);
+    v4f b4 = DP_LD(O1 + 16), b5 = DP_LD(O1 + 20), b6 = DP_LD(O1 + 24), b7 = DP_LD(O1 + 28);
+    for (int k = 0; k < ntaps; k++) {
+        v4f w0 = *(const v4f*)W, w1 = *(const v4f*)(W + 4);
+        v4f p = *(const v4f*)P0, q = *(const v4f*)P1;
+        a0 += w0 * p[0]; a1 += w1 * p[0]; a2 += w0 * p[1]; a3 += w1 * p[1];
+        a4 += w0 * p[2]; a5 += w1 * p[2]; a6 += w0 * p[3]; a7 += w1 * p[3];
+        b0 += w0 * q[0]; b1 += w1 * q[0]; b2 += w0 * q[1]; b3 += w1 * q[1];
+        b4 += w0 * q[2]; b5 += w1 * q[2]; b6 += w0 * q[3]; b7 += w1 * q[3];
+        W += 8; P0 += 4; P1 += 4;
+    }
+    *(v4f*)(O0) = a0; *(v4f*)(O0 + 4) = a1; *(v4f*)(O0 + 8) = a2; *(v4f*)(O0 + 12) = a3;
+    *(v4f*)(O0 + 16) = a4; *(v4f*)(O0 + 20) = a5; *(v4f*)(O0 + 24) = a6; *(v4f*)(O0 + 28) = a7;
+    *(v4f*)(O1) = b0; *(v4f*)(O1 + 4) = b1; *(v4f*)(O1 + 8) = b2; *(v4f*)(O1 + 12) = b3;
+    *(v4f*)(O1 + 16) = b4; *(v4f*)(O1 + 20) = b5; *(v4f*)(O1 + 24) = b6; *(v4f*)(O1 + 28) = b7;
+}
 
 /* Pack input channels [ci0, ci0 + nci) for pixels pix0.. into P[group][ci][tap][lane].
  * Lanes past the last pixel stay zero. */
@@ -1103,31 +1129,34 @@ static inline void dp_pack_patches(const float* input, float* P, int pix0, int n
         return;
     }
 #if HAS_ARM_NEON
-    if (k == 3 && s == 2) {
+    if ((k == 3 || k == 7) && s == 2) {
         /* 4 neighbouring pixels read every other value of a row, so one deinterleaving load
-         * gives taps 0 and 1 for all four, and a second one, 2 values on, gives tap 2. */
+         * gives taps kw and kw + 1 for all four (3x3 convs and the 7x7 ResNet stem). */
         for (int g = 0; g < ng; g++) {
             int pix = pix0 + g * 4, oh = pix / Wout, ow = pix % Wout, n = np - g * 4 < 4 ? np - g * 4 : 4;
-            float* gp = P + (size_t)g * nci * 9 * 4;
-            if (n == 4 && ow + 3 < Wout && 2 * ow + 10 <= W) {
+            float* gp = P + (size_t)g * nci * taps * 4;
+            if (n == 4 && ow + 3 < Wout && 2 * ow + k + 7 <= W) {
                 for (int ci = 0; ci < nci; ci++) {
                     const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oh * 2) * W + ow * 2;
-                    for (int kh = 0; kh < 3; kh++) {
-                        float32x4x2_t a = vld2q_f32(in + kh * W), c = vld2q_f32(in + kh * W + 2);
-                        float* d = gp + (size_t)(ci * 9 + kh * 3) * 4;
-                        vst1q_f32(d, a.val[0]);
-                        vst1q_f32(d + 4, a.val[1]);
-                        vst1q_f32(d + 8, c.val[0]);
+                    for (int kh = 0; kh < k; kh++) {
+                        float* d = gp + (size_t)(ci * taps + kh * k) * 4;
+                        int kw = 0;
+                        for (; kw + 1 < k; kw += 2) {
+                            float32x4x2_t a = vld2q_f32(in + kh * W + kw);
+                            vst1q_f32(d + kw * 4, a.val[0]);
+                            vst1q_f32(d + kw * 4 + 4, a.val[1]);
+                        }
+                        vst1q_f32(d + kw * 4, vld2q_f32(in + kh * W + kw).val[0]);
                     }
                 }
                 continue;
             }
-            memset(gp, 0, (size_t)nci * 9 * 4 * sizeof(float));   /* row edges and partial groups */
+            memset(gp, 0, (size_t)nci * taps * 4 * sizeof(float));   /* row edges and partial groups */
             for (int j = 0; j < n; j++) {
                 int pj = pix + j, oy = pj / Wout, ox = pj % Wout;
                 for (int ci = 0; ci < nci; ci++) {
                     const float* in = input + (size_t)(ci0 + ci) * H * W + (size_t)(oy * 2) * W + ox * 2;
-                    for (int t = 0; t < 9; t++) gp[(size_t)(ci * 9 + t) * 4 + j] = in[(t / 3) * W + t % 3];
+                    for (int t = 0; t < taps; t++) gp[(size_t)(ci * taps + t) * 4 + j] = in[(t / k) * W + t % k];
                 }
             }
         }
@@ -1210,7 +1239,10 @@ void conv2d_direct_packed_ep(
     int Wout = (W - k) / s + 1;
     int N_pix = Hout * Wout;
     int ncb = (Cout + 7) / 8;
-    int block = g_dp_block;
+    /* One thread reuses each weight block over 48 pixels (fewer passes over weights that
+     * outgrow L2: 5-7% faster on ResNet's stride-2 convs); more threads keep 16 so the
+     * blocks spread. 1x1 convs keep 16 either way. */
+    int block = g_dp_block > 0 ? g_dp_block : (T == 1 && k > 1 ? 48 : 16);
     int taps = k * k;
     int kci = g_dp_kci * 9 / taps;
     if (kci < 1) kci = 1;
@@ -1230,7 +1262,7 @@ void conv2d_direct_packed_ep(
                 const float* W_blk = W_p + (((size_t)cb * Cin + ci0) * taps) * 8;
                 for (int g = 0; g < ng; g++) {
                     dp_kernel(W_blk, P + ((size_t)g * Cin + ci0) * taps * 4,
-                              O + ((size_t)g * ncb + cb) * 32, nci * taps);
+                              O + ((size_t)g * ncb + cb) * 32, nci * taps, 0);
                 }
             }
         }
@@ -1264,10 +1296,10 @@ void conv2d_direct_packed_ep(
                     for (; g_k3 && g + 3 <= ng; g += 3) {
                         dp_kernel3(W_blk, P + g * gs, P + (g + 1) * gs, P + (g + 2) * gs,
                                    O + ((size_t)g * ncb + cb) * 32, O + ((size_t)(g + 1) * ncb + cb) * 32,
-                                   O + ((size_t)(g + 2) * ncb + cb) * 32, nci * taps);
+                                   O + ((size_t)(g + 2) * ncb + cb) * 32, nci * taps, 4, 0);
                     }
                     for (; g < ng; g++) {
-                        dp_kernel(W_blk, P + (size_t)g * gs, O + ((size_t)g * ncb + cb) * 32, nci * taps);
+                        dp_kernel(W_blk, P + (size_t)g * gs, O + ((size_t)g * ncb + cb) * 32, nci * taps, 0);
                     }
                 }
             }
@@ -1291,9 +1323,12 @@ void conv2d_direct_packed(const float* input, const float* W_p, float* output, i
  * outputs = weights x inputs, with 4 tiles in a register, so dp_kernel gets the same
  * 32 from 2 registers of weights.
  *
- * Layouts: U_p[freq][co_block][ci][co within block], V[group][freq][ci][tile within
- * group], Mb[group][freq][co_block][32]. Batches round up to a multiple of 4 tiles,
- * so this has no strict one-tile mode: use v5 for that.
+ * Layouts: U_p[freq][co_block][ci][co within block], Mb[group][freq][co_block][32], and
+ * V[freq][tiles][ci][lane]: each block of 12 tiles stores its 12 values per channel side by
+ * side, so the multiply reads one stream (separate 4-tile streams sat a multiple of the
+ * L1 way size apart and evicted each other in the 2-way L1), and tiles past the last
+ * whole block of 12 go in groups of 4. Batches round up to a multiple of 4 tiles, so
+ * this has no strict one-tile mode: use v5 for that.
  * ------------------------------------------------------------------------- */
 static float* v6_pack_weights(int m, const float* U, int Cin, int Cout) {
     int alpha2 = (m + 2) * (m + 2);
@@ -1311,14 +1346,25 @@ static float* v6_pack_weights(int m, const float* U, int Cin, int Cout) {
     return U_p;
 }
 
-static inline void v6_input_tile(int m, const float* input, float* V, int slot, int t,
+/* Where slot's value for (freq 0, channel 0) sits in V for a batch of nt tiles; *rs gets
+ * the step between channels. One frequency spans v6_vfreq floats. */
+static inline size_t v6_vbase(int slot, int nt, int Cin, int* rs) {
+    if (slot < nt / 12 * 12) { *rs = 12; return (size_t)(slot / 12) * 12 * Cin + slot % 12; }
+    *rs = 4;
+    return (size_t)(slot / 4) * 4 * Cin + slot % 4;
+}
+/* The extra 16 floats keep the per-frequency write streams of the input transform out of
+ * the same L1 sets when the plain size is a multiple of 4 KB. */
+static inline size_t v6_vfreq(int nt, int Cin) { return (size_t)(nt + 3) / 4 * 4 * Cin + 16; }
+
+static inline void v6_input_tile(int m, const float* input, float* V, int slot, int t, int nt,
                                  int H, int W, int Cin, int Tw) {
     int alpha = m + 2;
     int alpha2 = alpha * alpha;
     int h_start = (t / Tw) * m;
     int w_start = (t % Tw) * m;
-    size_t group = (size_t)(slot / 4) * alpha2;
-    int lane = slot % 4;
+    int rs;
+    size_t base = v6_vbase(slot, nt, Cin, &rs), kstride = v6_vfreq(nt, Cin);
     /* Transform first, then copy one frequency at a time, so writes stay sequential
      * however large the batch is. */
     float* tmp = v5_scratch(2, (size_t)Cin * alpha2);
@@ -1334,33 +1380,40 @@ static inline void v6_input_tile(int m, const float* input, float* V, int slot, 
         transform_input_tile(m, d, tmp + (size_t)ci * alpha2);
     }
     for (int k = 0; k < alpha2; k++) {
-        float* dst = V + (group + k) * Cin * 4 + lane;
+        float* dst = V + k * kstride + base;
         for (int ci = 0; ci < Cin; ci++) {
-            dst[ci * 4] = tmp[(size_t)ci * alpha2 + k];
+            dst[ci * rs] = tmp[(size_t)ci * alpha2 + k];
         }
     }
 }
 
 static inline void v6_multiply(const float* U_p, const float* V, float* Mb, int k, int cb,
-                               int ng, int alpha2, int ncb, int Cin) {
+                               int nt, int alpha2, int ncb, int Cin) {
+    int ng = (nt + 3) / 4, n12 = nt / 12 * 3;
+    const float* Vk = V + k * v6_vfreq(nt, Cin);
     for (int ci0 = 0; ci0 < Cin; ci0 += g_v5_kc) {
         int nci = (ci0 + g_v5_kc <= Cin) ? g_v5_kc : Cin - ci0;
         const float* U_blk = U_p + (((size_t)k * ncb + cb) * Cin + ci0) * 8;
         int g = 0;
-        for (; g_k3 && g + 3 <= ng; g += 3) {
+        for (; g < n12; g += 3) {
+            const float* v = Vk + (size_t)g * 4 * Cin + ci0 * 12;
             size_t k0 = (size_t)g * alpha2 + k, k1 = k0 + alpha2, k2 = k1 + alpha2;
-            dp_kernel3(U_blk, V + (k0 * Cin + ci0) * 4, V + (k1 * Cin + ci0) * 4, V + (k2 * Cin + ci0) * 4,
-                       Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci);
+            dp_kernel3(U_blk, v, v + 4, v + 8,
+                       Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci, 12, ci0 == 0);
         }
-        for (; g < ng; g++) {
-            size_t gk = (size_t)g * alpha2 + k;
-            dp_kernel(U_blk, V + (gk * Cin + ci0) * 4, Mb + (gk * ncb + cb) * 32, nci);
-        }
+        /* 1-3 groups of 4 left, each its own stream */
+        const float* v = Vk + (size_t)g * 4 * Cin + ci0 * 4;
+        size_t gs = (size_t)4 * Cin, k0 = (size_t)g * alpha2 + k, k1 = k0 + alpha2, k2 = k1 + alpha2;
+        if (ng - g == 3) dp_kernel3(U_blk, v, v + gs, v + 2 * gs, Mb + (k0 * ncb + cb) * 32,
+                                    Mb + (k1 * ncb + cb) * 32, Mb + (k2 * ncb + cb) * 32, nci, 4, ci0 == 0);
+        else if (ng - g == 2) dp_kernel2(U_blk, v, v + gs, Mb + (k0 * ncb + cb) * 32, Mb + (k1 * ncb + cb) * 32, nci, ci0 == 0);
+        else if (ng - g == 1) dp_kernel(U_blk, v, Mb + (k0 * ncb + cb) * 32, nci, ci0 == 0);
     }
 }
 
 static inline void v6_output_tile(int m, const float* Mb, float* output, int slot, int t,
-                                  int Hout, int Wout, int Cout, int Tw) {
+                                  int Hout, int Wout, int Cout, int Tw, int ldo, size_t oplane,
+                                  const float* bias, float lo, float hi) {
     int alpha2 = (m + 2) * (m + 2);
     int ncb = (Cout + 7) / 8;
     int h_start = (t / Tw) * m;
@@ -1382,16 +1435,16 @@ static inline void v6_output_tile(int m, const float* Mb, float* output, int slo
                 int oh = h_start + r;
                 int ow = w_start + c;
                 if (oh < Hout && ow < Wout) {
-                    output[(size_t)co * Hout * Wout + oh * Wout + ow] = y[r * m + c];
+                    float v = y[r * m + c] + (bias ? bias[co] : 0.0f);
+                    output[(size_t)co * oplane + (size_t)oh * ldo + ow] = v < lo ? lo : (v > hi ? hi : v);
                 }
             }
         }
     }
 }
 
-/* F(4,3) transforms for 4 tiles at once, one tile per lane. Four neighbouring tiles
- * in a row start 4 columns apart, so one deinterleaving load gives a column of all
- * four, and the transforms are written out as their few nonzero terms. */
+/* F(4,3) and F(6,3) transforms for 4 tiles at once, one tile per lane, written out as
+ * their few nonzero terms. */
 #if HAS_ARM_NEON
 static inline void bt4_1d(const v4f* d, int s, v4f* o, int os) {
     v4f d0 = d[0], d1 = d[s], d2 = d[2 * s], d3 = d[3 * s], d4 = d[4 * s], d5 = d[5 * s];
@@ -1413,31 +1466,115 @@ static inline void at4_1d(const v4f* m, int s, v4f* o, int os) {
     o[3 * os] = b + d * 8.0f + m[5 * s];
 }
 
-/* Input tiles t..t+3 sit in one tile row, starting at (h0, w0), with 20 columns readable */
-static void v6_input_group_m4(const float* input, float* V, size_t group, int h0, int w0,
-                              int H, int W, int Cin) {
-    for (int ci = 0; ci < Cin; ci++) {
-        const float* p = input + (size_t)ci * H * W + (size_t)h0 * W + w0;
-        v4f d[36], t[36], v[36];
-        for (int r = 0; r < 6; r++) {
-            float32x4x4_t a = vld4q_f32(p + (size_t)r * W);
-            float32x4x4_t b = vld4q_f32(p + (size_t)r * W + 4);
-            d[r * 6 + 0] = (v4f)a.val[0]; d[r * 6 + 1] = (v4f)a.val[1];
-            d[r * 6 + 2] = (v4f)a.val[2]; d[r * 6 + 3] = (v4f)a.val[3];
-            d[r * 6 + 4] = (v4f)b.val[0]; d[r * 6 + 5] = (v4f)b.val[1];
+static inline void bt6_1d(const v4f* d, int s, v4f* o, int os) {
+    v4f d0 = d[0], d1 = d[s], d2 = d[2 * s], d3 = d[3 * s];
+    v4f d4 = d[4 * s], d5 = d[5 * s], d6 = d[6 * s], d7 = d[7 * s];
+    v4f t1 = d2 + d6 - d4 * 4.25f, t2 = d1 + d5 - d3 * 4.25f;
+    v4f t3 = d6 + d2 * 0.25f - d4 * 1.25f, t4 = d1 * 0.5f - d3 * 2.5f + d5 * 2.0f;
+    v4f t5 = d6 + (d2 - d4 * 1.25f) * 4.0f, t6 = d1 * 2.0f - d3 * 2.5f + d5 * 0.5f;
+    o[0] = d0 - d6 + (d4 - d2) * 5.25f;
+    o[os] = t1 + t2;
+    o[2 * os] = t1 - t2;
+    o[3 * os] = t3 + t4;
+    o[4 * os] = t3 - t4;
+    o[5 * os] = t5 + t6;
+    o[6 * os] = t5 - t6;
+    o[7 * os] = d7 - d1 + (d3 - d5) * 5.25f;
+}
+
+static inline void at6_1d(const v4f* m, int s, v4f* o, int os) {
+    v4f a = m[s] + m[2 * s], b = m[s] - m[2 * s], c = m[3 * s] + m[4 * s];
+    v4f d = m[3 * s] - m[4 * s], e = m[5 * s] + m[6 * s], f = m[5 * s] - m[6 * s];
+    o[0] = m[0] + a + c + e * 32.0f;
+    o[os] = b + d * 2.0f + f * 16.0f;
+    o[2 * os] = a + c * 4.0f + e * 8.0f;
+    o[3 * os] = b + d * 8.0f + f * 4.0f;
+    o[4 * os] = a + c * 16.0f + e * 2.0f;
+    o[5 * os] = b + d * 32.0f + f + m[7 * s];
+}
+
+/* 4x4 transpose: rows a, b, c, d become columns */
+#define V6_TR4(a, b, c, d) do {                                                              \
+    float32x4x2_t ab_ = vtrnq_f32(a, b), cd_ = vtrnq_f32(c, d);                               \
+    a = vcombine_f32(vget_low_f32(ab_.val[0]), vget_low_f32(cd_.val[0]));                    \
+    b = vcombine_f32(vget_low_f32(ab_.val[1]), vget_low_f32(cd_.val[1]));                    \
+    c = vcombine_f32(vget_high_f32(ab_.val[0]), vget_high_f32(cd_.val[0]));                  \
+    d = vcombine_f32(vget_high_f32(ab_.val[1]), vget_high_f32(cd_.val[1]));                  \
+} while (0)
+
+/* Input transform of 4 tiles whose windows start at rows h[j], columns w[j]. mode 2 (m=4):
+ * neighbours in one row with 20 columns readable, so one deinterleaving load gives a column
+ * of all four. mode 1: every window inside, read a row of each and transposed. mode 0: a
+ * window crosses the bottom or right edge, so copy with zeros. */
+__attribute__((always_inline))
+static inline void v6_input_group(int m, const float* input, float* V, int rs, size_t kstride,
+                                  const int* h, const int* w, int mode, int H, int W, int c0, int c1) {
+    const int alpha = m + 2, a2 = alpha * alpha;
+    size_t off[4];
+    for (int j = 0; j < 4; j++) off[j] = (size_t)h[j] * W + w[j];
+    for (int ci = c0; ci < c1; ci++) {
+        const float* plane = input + (size_t)ci * H * W;
+        v4f d[64], t[64];
+        if (m == 4 && mode == 2) {
+            for (int r = 0; r < 6; r++) {
+                float32x4x4_t a = vld4q_f32(plane + off[0] + (size_t)r * W);
+                float32x4x4_t b = vld4q_f32(plane + off[0] + (size_t)r * W + 4);
+                d[r * 6 + 0] = (v4f)a.val[0]; d[r * 6 + 1] = (v4f)a.val[1];
+                d[r * 6 + 2] = (v4f)a.val[2]; d[r * 6 + 3] = (v4f)a.val[3];
+                d[r * 6 + 4] = (v4f)b.val[0]; d[r * 6 + 5] = (v4f)b.val[1];
+            }
+        } else if (mode == 1) {
+            /* columns 0-3, then the last 4 (alpha - 4 on), of each window row */
+            for (int r = 0; r < alpha; r++) {
+                const float* p = plane + (size_t)r * W;
+                float32x4_t a = vld1q_f32(p + off[0]), b = vld1q_f32(p + off[1]);
+                float32x4_t c = vld1q_f32(p + off[2]), e = vld1q_f32(p + off[3]);
+                V6_TR4(a, b, c, e);
+                d[r * alpha] = (v4f)a; d[r * alpha + 1] = (v4f)b;
+                d[r * alpha + 2] = (v4f)c; d[r * alpha + 3] = (v4f)e;
+                p += alpha - 4;
+                a = vld1q_f32(p + off[0]); b = vld1q_f32(p + off[1]);
+                c = vld1q_f32(p + off[2]); e = vld1q_f32(p + off[3]);
+                V6_TR4(a, b, c, e);
+                if (alpha == 8) { d[r * 8 + 4] = (v4f)a; d[r * 8 + 5] = (v4f)b; }
+                d[r * alpha + alpha - 2] = (v4f)c; d[r * alpha + alpha - 1] = (v4f)e;
+            }
+        } else {
+            float g[64][4] __attribute__((aligned(16)));
+            for (int j = 0; j < 4; j++) {
+                for (int r = 0; r < alpha; r++) {
+                    for (int c = 0; c < alpha; c++) {
+                        int ih = h[j] + r, iw = w[j] + c;
+                        g[r * alpha + c][j] = (ih < H && iw < W) ? plane[(size_t)ih * W + iw] : 0.0f;
+                    }
+                }
+            }
+            for (int k = 0; k < a2; k++) d[k] = *(const v4f*)g[k];
         }
-        for (int c = 0; c < 6; c++) bt4_1d(d + c, 6, t + c, 6);
-        for (int r = 0; r < 6; r++) bt4_1d(t + r * 6, 1, v + r * 6, 1);
-        for (int k = 0; k < 36; k++) *(v4f*)(V + ((group + k) * Cin + ci) * 4) = v[k];
+        if (m == 4) {
+            for (int c = 0; c < 6; c++) bt4_1d(d + c, 6, t + c, 6);
+            for (int r = 0; r < 6; r++) bt4_1d(t + r * 6, 1, d + r * 6, 1);
+        } else {
+            for (int c = 0; c < 8; c++) bt6_1d(d + c, 8, t + c, 8);
+            for (int r = 0; r < 8; r++) bt6_1d(t + r * 8, 1, d + r * 8, 1);
+        }
+        for (int k = 0; k < a2; k++) *(v4f*)(V + k * kstride + (size_t)ci * rs) = d[k];
     }
 }
 
-/* Output tiles t..t+3 cover a whole 4 x 16 block starting at (h0, w0) */
-static void v6_output_group_m4(const float* Mb, float* output, size_t group, int h0, int w0,
-                               int Hout, int Wout, int Cout, int ncb) {
+/* Output transform of 4 tiles (nj of them real) starting at h[j], w[j], with bias and clamp.
+ * Output rows are ldo floats apart and channels oplane.
+ * mode 2 (m=4): neighbours in one row covering a whole 4 x 16 block. mode 1: every tile
+ * inside, transposed and stored a row at a time. mode 0: a tile crosses the edge. */
+__attribute__((always_inline))
+static inline void v6_output_group(int m, const float* Mb, float* output, size_t group,
+                                   const int* h, const int* w, int nj, int mode, int Hout, int Wout, int ldo, size_t oplane,
+                                   int Cout, const float* bias, float lo, float hi) {
+    const int alpha = m + 2, a2 = alpha * alpha;
+    int ncb = (Cout + 7) / 8;
     for (int cb = 0; cb < ncb; cb++) {
-        v4f mt[8][36];
-        for (int k = 0; k < 36; k++) {
+        v4f mt[8][64];
+        for (int k = 0; k < a2; k++) {
             /* 4 tiles x 8 channels to 8 channels x 4 tiles */
             const float* o = Mb + ((group + k) * ncb + cb) * 32;
             for (int half = 0; half < 2; half++) {
@@ -1452,67 +1589,138 @@ static void v6_output_group_m4(const float* Mb, float* output, size_t group, int
             }
         }
         for (int j = 0; j < 8 && cb * 8 + j < Cout; j++) {
-            v4f t[24], y[16];
-            for (int c = 0; c < 6; c++) at4_1d(mt[j] + c, 6, t + c, 6);
-            for (int r = 0; r < 4; r++) at4_1d(t + r * 6, 1, y + r * 4, 1);
-            float* out = output + (size_t)(cb * 8 + j) * Hout * Wout + (size_t)h0 * Wout + w0;
-            for (int r = 0; r < 4; r++) {
-                float32x4x4_t v = {{(float32x4_t)y[r * 4], (float32x4_t)y[r * 4 + 1],
-                                    (float32x4_t)y[r * 4 + 2], (float32x4_t)y[r * 4 + 3]}};
-                vst4q_f32(out + (size_t)r * Wout, v);
+            int co = cb * 8 + j;
+            v4f t[48], y[36];
+            if (m == 4) {
+                for (int c = 0; c < 6; c++) at4_1d(mt[j] + c, 6, t + c, 6);
+                for (int r = 0; r < 4; r++) at4_1d(t + r * 6, 1, y + r * 4, 1);
+            } else {
+                for (int c = 0; c < 8; c++) at6_1d(mt[j] + c, 8, t + c, 8);
+                for (int r = 0; r < 6; r++) at6_1d(t + r * 8, 1, y + r * 6, 1);
+            }
+            float b = bias ? bias[co] : 0.0f;
+            for (int q = 0; q < m * m; q++) y[q] = clamp4(y[q] + b, lo, hi);
+            float* out = output + co * oplane;
+            if (m == 4 && mode == 2) {
+                for (int r = 0; r < 4; r++) {
+                    float32x4x4_t v = {{(float32x4_t)y[r * 4], (float32x4_t)y[r * 4 + 1],
+                                        (float32x4_t)y[r * 4 + 2], (float32x4_t)y[r * 4 + 3]}};
+                    vst4q_f32(out + (size_t)(h[0] + r) * ldo + w[0], v);
+                }
+            } else if (mode == 1) {
+                /* columns 0-3, then the last 4 (m - 4 on; for m = 4 the same ones again) */
+                for (int r = 0; r < m; r++) {
+                    for (int c0 = 0; c0 <= m - 4; c0 += m - 4 > 0 ? m - 4 : 4) {
+                        float32x4_t v[4] = {(float32x4_t)y[r * m + c0], (float32x4_t)y[r * m + c0 + 1],
+                                            (float32x4_t)y[r * m + c0 + 2], (float32x4_t)y[r * m + c0 + 3]};
+                        V6_TR4(v[0], v[1], v[2], v[3]);
+                        for (int jj = 0; jj < nj; jj++) vst1q_f32(out + (size_t)(h[jj] + r) * ldo + w[jj] + c0, v[jj]);
+                    }
+                }
+            } else {
+                for (int jj = 0; jj < nj; jj++) {
+                    for (int r = 0; r < m && h[jj] + r < Hout; r++) {
+                        for (int c = 0; c < m && w[jj] + c < Wout; c++) {
+                            out[(size_t)(h[jj] + r) * ldo + w[jj] + c] = y[r * m + c][jj];
+                        }
+                    }
+                }
             }
         }
     }
 }
 #endif
 
-/* Whether the 4 tiles from t can use the NEON transforms: same tile row, whole region inside */
-static inline int v6_in_fast(int m, int t, int n, int H, int W, int Tw) {
-    return HAS_ARM_NEON && m == 4 && n == 4 && t % Tw + 3 < Tw && (t / Tw) * m + 6 <= H && (t % Tw) * m + 20 <= W;
-}
-static inline int v6_out_fast(int m, int t, int n, int Hout, int Wout, int Tw) {
-    return HAS_ARM_NEON && m == 4 && n == 4 && t % Tw + 3 < Tw && (t / Tw) * m + 4 <= Hout && (t % Tw) * m + 16 <= Wout;
+/* Where the 4 tiles from t (n of them real) start; missing ones repeat the first. Returns
+ * the transform mode: 2 for neighbours in a row with `wide` columns inside, 1 if every
+ * window of `span` rows and columns is inside, 0 otherwise. */
+static inline int v6_group_pos(int m, int t, int n, int Tw, int H, int W, int span, int wide, int* h, int* w) {
+    int inside = 1;
+    for (int j = 0; j < 4; j++) {
+        int tj = t + (j < n ? j : 0);
+        h[j] = (tj / Tw) * m;
+        w[j] = (tj % Tw) * m;
+        inside &= h[j] + span <= H && w[j] + span <= W;
+    }
+    if (inside && m == 4 && n == 4 && h[3] == h[0] && w[3] == w[0] + 12 && w[0] + wide <= W) return 2;
+    return inside;
 }
 
-/* Slots slot0.. hold tiles t0..; slot0 is a multiple of 4. Whole groups of 4 tiles
- * that fit the fast path use it, and everything else goes one tile at a time. */
-static void v6_input_tiles(int m, const float* input, float* V, int slot0, int t0, int nt,
-                           int H, int W, int Cin, int Tw) {
+/* Slots slot0.. hold tiles t0..t0+n-1 of a batch of ntot; slot0 is a multiple of 4. The NEON
+ * path does channels [cb, ce), 8 at a time across all the groups, so the three groups sharing
+ * a block of 12 fill each line of V while it is still in L1, instead of each group fetching it
+ * again. The scalar path does every channel, in the call with cb 0. */
+static void v6_input_tiles(int m, const float* input, float* V, int slot0, int t0, int n, int ntot,
+                           int H, int W, int Cin, int Tw, int cb, int ce) {
+#if HAS_ARM_NEON
+    if (m == 4 || m == 6) {
+        for (int c0 = cb; c0 < ce; c0 += 8) {
+            int c1 = c0 + 8 < ce ? c0 + 8 : ce;
+            for (int i = 0; i < n; i += 4) {
+                int h[4], w[4], rs;
+                int mode = v6_group_pos(m, t0 + i, n - i < 4 ? n - i : 4, Tw, H, W, m + 2, 20, h, w);
+                size_t base = v6_vbase(slot0 + i, ntot, Cin, &rs);
+                if (m == 4) v6_input_group(4, input, V + base, rs, v6_vfreq(ntot, Cin), h, w, mode, H, W, c0, c1);
+                else v6_input_group(6, input, V + base, rs, v6_vfreq(ntot, Cin), h, w, mode, H, W, c0, c1);
+            }
+        }
+        return;
+    }
+#endif
+    for (int j = 0; j < n && cb == 0; j++) v6_input_tile(m, input, V, slot0 + j, t0 + j, ntot, H, W, Cin, Tw);
+}
+
+static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, int t0, int nt, int Hout, int Wout,
+                            int Cout, int Tw, int ldo, size_t oplane, const float* bias, float lo, float hi) {
     int alpha2 = (m + 2) * (m + 2);
     for (int i = 0; i < nt; i += 4) {
 #if HAS_ARM_NEON
-        int t = t0 + i, h0 = (t / Tw) * m, w0 = (t % Tw) * m;
-        if (v6_in_fast(m, t, i + 4 <= nt ? 4 : 0, H, W, Tw)) {
-            v6_input_group_m4(input, V, (size_t)((slot0 + i) / 4) * alpha2, h0, w0, H, W, Cin);
+        if (m == 4 || m == 6) {
+            int h[4], w[4], nj = nt - i < 4 ? nt - i : 4;
+            int mode = v6_group_pos(m, t0 + i, nj, Tw, Hout, Wout, m, 16, h, w);
+            size_t group = (size_t)((slot0 + i) / 4) * alpha2;
+            if (m == 4) v6_output_group(4, Mb, output, group, h, w, nj, mode, Hout, Wout, ldo, oplane, Cout, bias, lo, hi);
+            else v6_output_group(6, Mb, output, group, h, w, nj, mode, Hout, Wout, ldo, oplane, Cout, bias, lo, hi);
             continue;
         }
 #endif
         (void)alpha2;
-        for (int j = i; j < i + 4 && j < nt; j++) v6_input_tile(m, input, V, slot0 + j, t0 + j, H, W, Cin, Tw);
+        for (int j = i; j < i + 4 && j < nt; j++)
+            v6_output_tile(m, Mb, output, slot0 + j, t0 + j, Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
     }
 }
 
-static void v6_output_tiles(int m, const float* Mb, float* output, int slot0, int t0, int nt,
-                            int Hout, int Wout, int Cout, int Tw) {
-    int alpha2 = (m + 2) * (m + 2);
-    for (int i = 0; i < nt; i += 4) {
-#if HAS_ARM_NEON
-        int t = t0 + i, h0 = (t / Tw) * m, w0 = (t % Tw) * m;
-        if (v6_out_fast(m, t, i + 4 <= nt ? 4 : 0, Hout, Wout, Tw)) {
-            v6_output_group_m4(Mb, output, (size_t)((slot0 + i) / 4) * alpha2, h0, w0, Hout, Wout, Cout, (Cout + 7) / 8);
-            continue;
-        }
-#endif
-        (void)alpha2;
-        for (int j = i; j < i + 4 && j < nt; j++) v6_output_tile(m, Mb, output, slot0 + j, t0 + j, Hout, Wout, Cout, Tw);
+/* Tile size for a 3x3 stride-1 conv on an H x W padded input: F(4,3) or F(6,3), whichever a
+ * cost model says is faster. Per tile (tile counts rounded up to whole groups of 4): the
+ * multiply costs alpha^2 * Cin * Cout units, F(6,3)'s 15% more per unit for its bigger weight
+ * table, plus each input and output channel's transform. Weights in ns, measured on the RPi4
+ * at T=1 (raw_logs/harness/sc_pick_m.txt). F(6,3) wins on large channel counts whose maps
+ * are a multiple of 6 or 12, e.g. 128 x 24 x 24 and 384 x 12 x 12. With more threads F(4,3)'s
+ * extra tiles split better (woof_wn_e at T=4: 13% slower with F(6,3)), so it stays.
+ * ponytail: fitted on one board; refit the six constants for another. */
+__attribute__((unused)) static int v6_pick_m(int H, int W, int Cin, int Cout, int T) {
+    if (T > 1) return 4;
+    double best = 0.0;
+    int best_m = 4;
+    for (int m = 4; m <= 6; m += 2) {
+        int tiles = ((H - 2 + m - 1) / m) * ((W - 2 + m - 1) / m);
+        double per_tile = m == 4 ? 36 * 0.20 * Cin * Cout + 165.0 * Cin + 91.0 * Cout
+                                 : 64 * 0.23 * Cin * Cout + 440.0 * Cin + 317.0 * Cout;
+        double cost = (tiles + 3) / 4 * 4 * per_tile;
+        if (m == 4 || cost < best) best = cost, best_m = m;
     }
+    return best_m;
 }
 
-void conv2d_v6_freq(
+/* bias (may be NULL) is added and the result clamped to [lo, hi] as tiles are written. With
+ * opad > 0, output is a buffer with an opad-wide border (the next conv's padded input) and
+ * only its interior is written. */
+void conv2d_v6_freq_ep(
     int m,
     const float* input,
     const float* U_p,
-    float* output,
+    const float* bias, float lo, float hi,
+    float* output, int opad,
     int H, int W,
     int Cin, int Cout,
     int T,
@@ -1526,36 +1734,42 @@ void conv2d_v6_freq(
     int Th = (Hout + m - 1) / m;
     int Tw = (Wout + m - 1) / m;
     int N_tiles = Th * Tw;
+    int ldo = Wout + 2 * opad;
+    size_t oplane = (size_t)ldo * (Hout + 2 * opad);
+    output += (size_t)opad * ldo + opad;
     size_t table_bytes = (size_t)Cin * Cout * alpha2 * sizeof(float);
-    /* ponytail: tuned on one RPi4 at T=1 and T=4; pass --batch for other boards. */
-    int batch = g_v5_batch > 0 ? (g_v5_batch + 3) / 4 * 4 : (table_bytes > V5_L2_BYTES ? 16 : 8);
+    /* One thread: one block of 12 tiles keeps V and Mb in cache. More threads: bigger
+     * batches, so layers with few tiles share one batch instead of leaving threads idle.
+     * ponytail: tuned on one RPi4 at T=1 and T=4; pass --batch for other boards. */
+    int batch = g_v5_batch > 0 ? (g_v5_batch + 3) / 4 * 4 : T == 1 ? 12 : (table_bytes > V5_L2_BYTES ? 16 : 8);
 
     if (N_tiles / T < batch) {
         /* Too few tiles for each thread to have a batch, so all threads share one
          * and split the frequencies and output channels instead. */
         int ng = (N_tiles + 3) / 4;
-        float* V = v5_scratch(0, (size_t)ng * alpha2 * Cin * 4);
+        float* V = v5_scratch(0, alpha2 * v6_vfreq(N_tiles, Cin));
         float* Mb = v5_scratch(1, (size_t)ng * alpha2 * ncb * 32);
-        memset(Mb, 0, (size_t)ng * alpha2 * ncb * 32 * sizeof(float));
         #pragma omp parallel num_threads(T)
         {
-            #pragma omp for schedule(dynamic)
-            for (int t = 0; t < N_tiles; t++) {
-                int g = t / 4 * 4, n4 = N_tiles - g < 4 ? N_tiles - g : 4;
-                if (!v6_in_fast(m, g, n4, H, W, Tw)) v6_input_tile(m, input, V, t, t, H, W, Cin, Tw);
-                else if (t == g) v6_input_tiles(m, input, V, g, g, 4, H, W, Cin, Tw);
+            /* threads take whole blocks of 12 tiles, which share cache lines of V, and split channels */
+            int nblk = (N_tiles + 11) / 12;
+            #pragma omp for collapse(2) schedule(dynamic)
+            for (int b = 0; b < nblk; b++) {
+                for (int c = 0; c < Cin; c += 32) {
+                    v6_input_tiles(m, input, V, b * 12, b * 12, N_tiles - b * 12 < 12 ? N_tiles - b * 12 : 12, N_tiles,
+                                   H, W, Cin, Tw, c, c + 32 < Cin ? c + 32 : Cin);
+                }
             }
             #pragma omp for collapse(2) schedule(dynamic)
             for (int k = 0; k < alpha2; k++) {
                 for (int cb = 0; cb < ncb; cb++) {
-                    v6_multiply(U_p, V, Mb, k, cb, ng, alpha2, ncb, Cin);
+                    v6_multiply(U_p, V, Mb, k, cb, N_tiles, alpha2, ncb, Cin);
                 }
             }
             #pragma omp for schedule(dynamic)
-            for (int t = 0; t < N_tiles; t++) {
-                int g = t / 4 * 4, n4 = N_tiles - g < 4 ? N_tiles - g : 4;
-                if (!v6_out_fast(m, g, n4, Hout, Wout, Tw)) v6_output_tile(m, Mb, output, t, t, Hout, Wout, Cout, Tw);
-                else if (t == g) v6_output_tiles(m, Mb, output, g, g, 4, Hout, Wout, Cout, Tw);
+            for (int g = 0; g < ng; g++) {
+                v6_output_tiles(m, Mb, output, g * 4, g * 4, N_tiles - g * 4 < 4 ? N_tiles - g * 4 : 4,
+                                Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
             }
         }
         return;
@@ -1565,24 +1779,27 @@ void conv2d_v6_freq(
     #pragma omp parallel num_threads(T)
     {
         int ng_max = batch / 4;
-        float* V = v5_scratch(0, (size_t)ng_max * alpha2 * Cin * 4);
+        float* V = v5_scratch(0, alpha2 * v6_vfreq(batch, Cin));
         float* Mb = v5_scratch(1, (size_t)ng_max * alpha2 * ncb * 32);
 
         #pragma omp for schedule(dynamic)
         for (int b = 0; b < n_batches; b++) {
             int t0 = b * batch;
             int nt = (t0 + batch <= N_tiles) ? batch : N_tiles - t0;
-            int ng = (nt + 3) / 4;
-            v6_input_tiles(m, input, V, 0, t0, nt, H, W, Cin, Tw);
-            memset(Mb, 0, (size_t)ng * alpha2 * ncb * 32 * sizeof(float));
+            v6_input_tiles(m, input, V, 0, t0, nt, nt, H, W, Cin, Tw, 0, Cin);
             for (int k = 0; k < alpha2; k++) {
                 for (int cb = 0; cb < ncb; cb++) {
-                    v6_multiply(U_p, V, Mb, k, cb, ng, alpha2, ncb, Cin);
+                    v6_multiply(U_p, V, Mb, k, cb, nt, alpha2, ncb, Cin);
                 }
             }
-            v6_output_tiles(m, Mb, output, 0, t0, nt, Hout, Wout, Cout, Tw);
+            v6_output_tiles(m, Mb, output, 0, t0, nt, Hout, Wout, Cout, Tw, ldo, oplane, bias, lo, hi);
         }
     }
+}
+
+void conv2d_v6_freq(int m, const float* input, const float* U_p, float* output, int H, int W,
+                    int Cin, int Cout, int T, const char** executed_path) {
+    conv2d_v6_freq_ep(m, input, U_p, NULL, -INFINITY, INFINITY, output, 0, H, W, Cin, Cout, T, executed_path);
 }
 
 /* -------------------------------------------------------------------------
@@ -2224,11 +2441,12 @@ int run_harness_selftest(void) {
 
     /* v6_freq at sizes where whole groups of 4 tiles take the NEON transform path */
     {
-        int sizes[][2] = {{22, 38}, {23, 41}, {30, 66}};
+        int sizes[][2] = {{22, 38}, {23, 41}, {30, 66}, {9, 9}, {16, 16}, {14, 27}, {50, 26}};
         int ci6 = 5, co6 = 11;
         int saved_batch = g_v5_batch;
-        for (int si = 0; si < 3; si++) {
-            int h6 = sizes[si][0], w6 = sizes[si][1], ho6 = h6 - 2, wo6 = w6 - 2;
+        for (int si = 0; si < 14; si++) {
+            int m6 = si < 7 ? 4 : 6;
+            int h6 = sizes[si % 7][0], w6 = sizes[si % 7][1], ho6 = h6 - 2, wo6 = w6 - 2, a6 = (m6 + 2) * (m6 + 2);
             size_t o6 = (size_t)co6 * ho6 * wo6;
             float* in6 = (float*)malloc((size_t)ci6 * h6 * w6 * sizeof(float));
             float* w_6 = (float*)malloc((size_t)co6 * ci6 * 9 * sizeof(float));
@@ -2237,29 +2455,47 @@ int run_harness_selftest(void) {
             for (int i = 0; i < ci6 * h6 * w6; i++) in6[i] = (float)((i % 23) - 11) / 11.0f;
             for (int i = 0; i < co6 * ci6 * 9; i++) w_6[i] = (float)((i % 7) - 3) / 3.0f;
             conv2d_naive_direct(in6, w_6, ref6, h6, w6, ci6, co6, 1, &path);
-            float* U = (float*)malloc((size_t)co6 * ci6 * 36 * sizeof(float));
-            transform_weights(4, ci6, co6, w_6, U);
-            float* U_p = v6_pack_weights(4, U, ci6, co6);
-            int batches[] = {4, 8, 1000};
-            for (int ti = 0; ti < 2; ti++) for (int bi = 0; bi < 3; bi++) {
+            /* with bias and a clamp that cuts both ends, as fused into the output transform */
+            float b6[11], lo6 = -1.0f, hi6 = 1.5f;
+            for (int co = 0; co < co6; co++) b6[co] = (co % 5 - 2) * 0.3f;
+            for (size_t i = 0; i < o6; i++) {
+                float v = ref6[i] + b6[i / ((size_t)ho6 * wo6)];
+                ref6[i] = v < lo6 ? lo6 : (v > hi6 ? hi6 : v);
+            }
+            float* U = (float*)malloc((size_t)co6 * ci6 * a6 * sizeof(float));
+            transform_weights(m6, ci6, co6, w_6, U);
+            float* U_p = v6_pack_weights(m6, U, ci6, co6);
+            int batches[] = {4, 8, 24, 1000};
+            for (int ti = 0; ti < 2; ti++) for (int bi = 0; bi < 4; bi++) {
                 g_v5_batch = batches[bi];
                 memset(out6, 0, o6 * sizeof(float));
-                conv2d_v6_freq(4, in6, U_p, out6, h6, w6, ci6, co6, test_T_vals[ti], &path);
+                conv2d_v6_freq_ep(m6, in6, U_p, b6, lo6, hi6, out6, 0, h6, w6, ci6, co6, test_T_vals[ti], &path);
                 float max_err = 0.0f;
                 for (size_t i = 0; i < o6; i++) {
                     float err = fabsf(ref6[i] - out6[i]);
                     if (err > max_err) max_err = err;
                 }
+                /* into a buffer with a 1-wide border, which must stay zero */
+                size_t pp = (size_t)(ho6 + 2) * (wo6 + 2);
+                float* outp = (float*)calloc(co6 * pp, sizeof(float));
+                conv2d_v6_freq_ep(m6, in6, U_p, b6, lo6, hi6, outp, 1, h6, w6, ci6, co6, test_T_vals[ti], &path);
+                for (int co = 0; co < co6; co++) for (int y = 0; y < ho6 + 2; y++) for (int x = 0; x < wo6 + 2; x++) {
+                    int in_int = y >= 1 && y <= ho6 && x >= 1 && x <= wo6;
+                    float want = in_int ? ref6[((size_t)co * ho6 + y - 1) * wo6 + x - 1] : 0.0f;
+                    float err = fabsf(outp[co * pp + (size_t)y * (wo6 + 2) + x] - want);
+                    if (err > max_err) max_err = err;
+                }
+                free(outp);
                 if (max_err > 1e-3f) {
-                    fprintf(stderr, "FATAL: v6_freq transforms %dx%d T=%d batch=%d (max_err=%.4e)\n",
-                            h6, w6, test_T_vals[ti], g_v5_batch, max_err);
+                    fprintf(stderr, "FATAL: v6_freq transforms m=%d %dx%d T=%d batch=%d (max_err=%.4e)\n",
+                            m6, h6, w6, test_T_vals[ti], g_v5_batch, max_err);
                     return 1;
                 }
             }
             free(in6); free(w_6); free(ref6); free(out6); free(U); free(U_p);
         }
         g_v5_batch = saved_batch;
-        printf("  v6_freq transform paths OK (whole groups, partial groups, edges, both thread counts)\n");
+        printf("  v6_freq transform paths OK (m 4 and 6, whole groups, partial groups, edges, bias and clamp, both thread counts)\n");
     }
 
     /* direct_packed: kernel size, stride, Cout padding, partial blocks, both threading modes */
@@ -2267,7 +2503,7 @@ int run_harness_selftest(void) {
         int h3 = 15, w3 = 15, ci3 = 37, co3 = 9;
         int saved_kci = g_dp_kci, saved_block = g_dp_block;
         int ks[] = {1, 3, 5, 7, 11}, ss[] = {1, 2, 4};
-        int kcis[] = {1, 32, 64}, blocks[] = {1, 6, 32};
+        int kcis[] = {1, 32, 64}, blocks[] = {0, 1, 6, 32};
         size_t i3 = (size_t)ci3 * h3 * w3;
         float* in3 = (float*)malloc(i3 * sizeof(float));
         for (size_t i = 0; i < i3; i++) in3[i] = (float)((long long)(i % 17) - 8) / 8.0f;
@@ -2291,7 +2527,7 @@ int run_harness_selftest(void) {
                     }
                     ref3[(size_t)co * ho3 * wo3 + ho * wo3 + wo] = (float)sum;
                 }
-                for (int ti = 0; ti < 2; ti++) for (int ki = 0; ki < 3; ki++) for (int bi = 0; bi < 3; bi++) {
+                for (int ti = 0; ti < 2; ti++) for (int ki = 0; ki < 3; ki++) for (int bi = 0; bi < 4; bi++) {
                     g_dp_kci = kcis[ki];
                     g_dp_block = blocks[bi];
                     memset(out3, 0, o3 * sizeof(float));
@@ -2504,18 +2740,19 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--dp-kci") == 0 && i + 1 < argc) g_dp_kci = atoi(argv[++i]);
         else if (strcmp(argv[i], "--dp-block") == 0 && i + 1 < argc) g_dp_block = atoi(argv[++i]);
         else if (strcmp(argv[i], "--stride") == 0 && i + 1 < argc) g_stride = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--k") == 0 && i + 1 < argc) g_ksize = atoi(argv[++i]);
     }
 
-    if (g_stride != 1 && strcmp(variant, "direct_packed") != 0) {
-        fprintf(stderr, "FATAL: only direct_packed supports --stride (got %s)\n", variant);
+    if ((g_stride != 1 || g_ksize != 3) && strcmp(variant, "direct_packed") != 0) {
+        fprintf(stderr, "FATAL: only direct_packed supports --stride and --k (got %s)\n", variant);
         return 5;
     }
-    int Hout = (H - 3) / g_stride + 1;
-    int Wout = (W - 3) / g_stride + 1;
-    double total_flops = 2.0 * (double)Hout * (double)Wout * (double)Cin * (double)Cout * 9.0;
+    int Hout = (H - g_ksize) / g_stride + 1;
+    int Wout = (W - g_ksize) / g_stride + 1;
+    double total_flops = 2.0 * (double)Hout * (double)Wout * (double)Cin * (double)Cout * g_ksize * g_ksize;
 
     size_t in_sz = (size_t)Cin * H * W;
-    size_t w_sz = (size_t)Cout * Cin * 9;
+    size_t w_sz = (size_t)Cout * Cin * g_ksize * g_ksize;
     size_t out_sz = (size_t)Cout * Hout * Wout;
 
     float* in = (float*)malloc(in_sz * sizeof(float));
@@ -2528,7 +2765,7 @@ int main(int argc, char** argv) {
 
     int alpha = m + 2;
     float* U = NULL;
-    float* W_p = strcmp(variant, "direct_packed") == 0 ? dp_pack_weights(w, Cin, Cout, 3) : NULL;
+    float* W_p = strcmp(variant, "direct_packed") == 0 ? dp_pack_weights(w, Cin, Cout, g_ksize) : NULL;
     if (strcmp(variant, "naive_direct") != 0 && strcmp(variant, "neon_direct") != 0 && !W_p) {
         U = (float*)malloc((size_t)Cout * Cin * alpha * alpha * sizeof(float));
         transform_weights(m, Cin, Cout, w, U);
@@ -2562,7 +2799,7 @@ int main(int argc, char** argv) {
         } else if (strcmp(variant, "v6_freq") == 0) {
             conv2d_v6_freq(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "direct_packed") == 0) {
-            conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, 3, g_stride, T, &exec_path);
+            conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, g_ksize, g_stride, T, &exec_path);
         }
         if (strcmp(exec_path, variant) != 0) {
             fprintf(stderr, "FATAL: Gate G2 Executed Path Assertion Failed: requested %s != executed %s\n", variant, exec_path);
@@ -2605,7 +2842,7 @@ int main(int argc, char** argv) {
         } else if (strcmp(variant, "v6_freq") == 0) {
             conv2d_v6_freq(m, in, U, out, H, W, Cin, Cout, T, &exec_path);
         } else if (strcmp(variant, "direct_packed") == 0) {
-            conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, 3, g_stride, T, &exec_path);
+            conv2d_direct_packed(in, W_p, out, H, W, Cin, Cout, g_ksize, g_stride, T, &exec_path);
         }
         double t1 = get_time_ms();
         double wall_time_ms = t1 - t0;
@@ -2616,7 +2853,6 @@ int main(int argc, char** argv) {
                 board, git_hash, cell_id, variant, m, T, H, W, Cin, Cout,
                 "warm", r, wall_time_ms, implied_gflops, freq_mhz, temp_c, throttle, exec_path);
     }
-
     if (out_csv) {
         fflush(fp);
         fsync(fileno(fp));

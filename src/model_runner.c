@@ -29,6 +29,9 @@ typedef struct {
     long woff, boff;
     float* pack;        /* packed conv weights */
     float* pad;         /* zero-padded input, conv only */
+    int pad_filled;     /* the conv before this one writes straight into pad */
+    float* out_pad;     /* write the output into the next conv's pad, with an out_p border */
+    int out_p;
     const float* w;     /* gemm weights */
     const float* bias;
     float* pw;          /* depthwise only: a fused 1x1 expansion before it (see fuse_pw_dw) */
@@ -44,6 +47,7 @@ static Op g_ops[MAX_OPS];
 static int g_nops;
 static double g_cat[N_CATS];
 static int g_v6;
+static int g_plan_m;   /* 1: v6 uses the plan's tile size instead of v6_pick_m */
 static int g_fc_fp16;  /* store fully connected weights as 16-bit floats, as ncnn does by default on Arm */
 #define MAX_OUTPUTS 8
 static int g_outs[MAX_OUTPUTS];
@@ -205,11 +209,13 @@ static void run_conv(Op* o, int T) {
     double t0 = get_time_ms();
     if (o->p && !o->depthwise) {
         int Hp = H + 2 * o->p, Wp = W + 2 * o->p;
-        #pragma omp parallel for num_threads(T) schedule(static)
-        for (int ci = 0; ci < o->cin; ci++) {
-            for (int r = 0; r < H; r++) {
-                memcpy(o->pad + ((size_t)ci * Hp + r + o->p) * Wp + o->p,
-                       src + ((size_t)ci * H + r) * W, (size_t)W * sizeof(float));
+        if (!o->pad_filled) {
+            #pragma omp parallel for num_threads(T) schedule(static)
+            for (int ci = 0; ci < o->cin; ci++) {
+                for (int r = 0; r < H; r++) {
+                    memcpy(o->pad + ((size_t)ci * Hp + r + o->p) * Wp + o->p,
+                           src + ((size_t)ci * H + r) * W, (size_t)W * sizeof(float));
+                }
             }
         }
         src = o->pad;
@@ -234,8 +240,13 @@ static void run_conv(Op* o, int T) {
         conv2d_pointwise(src, o->pack, o->bias, lo, hi, out->d, H * W, o->cin, o->cout, T);
         done = 1;
     } else if (o->use_v5) {
-        if (g_v6) conv2d_v6_freq(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
-        else conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
+        if (g_v6) {
+            conv2d_v6_freq_ep(o->m, src, o->pack, o->bias, lo, hi, o->out_pad ? o->out_pad : out->d, o->out_p,
+                              H, W, o->cin, o->cout, T, &path);
+            done = 1;
+        } else {
+            conv2d_v5_batched(o->m, src, o->pack, out->d, H, W, o->cin, o->cout, T, &path);
+        }
     } else {
         conv2d_direct_packed_ep(src, o->pack, o->bias, lo, hi, out->d, H, W, o->cin, o->cout, o->k, o->s, T, &path);
         done = 1;
@@ -315,6 +326,22 @@ static void run_op(Op* o, int T) {
                     int r0 = ho * o->s - o->p, c0 = wo * o->s - o->p;
                     int r1 = r0 + o->k < H ? r0 + o->k : H;
                     int c1 = c0 + o->k < W ? c0 + o->k : W;
+#if HAS_ARM_NEON
+                    /* stride 2, k 2 or 3, 4 windows inside the row: deinterleaving loads give
+                     * the even and odd columns of all four */
+                    if (o->s == 2 && (o->k == 2 || o->k == 3) && c0 >= 0 && wo + 4 <= Wo &&
+                        c0 + (o->k == 3 ? 10 : 8) <= W) {
+                        float32x4_t best = vdupq_n_f32(-INFINITY);
+                        for (int r = r0 < 0 ? 0 : r0; r < r1; r++) {
+                            float32x4x2_t a = vld2q_f32(p + (size_t)r * W + c0);
+                            best = vmaxq_f32(best, vmaxq_f32(a.val[0], a.val[1]));
+                            if (o->k == 3) best = vmaxq_f32(best, vld2q_f32(p + (size_t)r * W + c0 + 2).val[0]);
+                        }
+                        vst1q_f32(y + wo, best);
+                        wo += 3;
+                        continue;
+                    }
+#endif
                     float best = -INFINITY;
                     for (int r = r0 < 0 ? 0 : r0; r < r1; r++) {
                         for (int cc = c0 < 0 ? 0 : c0; cc < c1; cc++) {
@@ -431,7 +458,7 @@ static size_t assign_buffers(int in_id) {
     return total;
 }
 
-static void load_plan(const char* path, const float* weights, int use_v5, int* in_id) {
+static void load_plan(const char* path, const float* weights, int use_v5, int T, int* in_id) {
     FILE* f = fopen(path, "r");
     if (!f) die("cannot open plan");
     char word[32];
@@ -466,6 +493,7 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
             if (fscanf(f, "%d %d %d %d %d %d %d %d %ld %ld", &o->out, &o->in, &o->cin, &o->cout,
                        &o->k, &o->s, &o->p, &o->m, &o->woff, &o->boff) != 10) die("bad CONV");
             o->use_v5 = use_v5 && o->k == 3 && o->s == 1;
+            if (o->use_v5 && g_v6 && !g_plan_m) o->m = v6_pick_m(g_t[o->in].h + 2, g_t[o->in].w + 2, o->cin, o->cout, T);
             if (o->use_v5) {
                 int alpha = o->m + 2;
                 float* U = (float*)malloc((size_t)o->cout * o->cin * alpha * alpha * sizeof(float));
@@ -543,6 +571,35 @@ static void load_plan(const char* path, const float* weights, int use_v5, int* i
         if (++g_nops >= MAX_OPS) die("too many ops");
     }
     fclose(f);
+
+    /* A v6 conv whose output only feeds the next op, a padded conv, writes into that conv's
+     * padded input, which skips a copy of the whole tensor through memory. Nothing runs in
+     * between, so the pad buffer (shared by convs of one shape) can't be overwritten, except
+     * by the producer itself when it reads its own input from that buffer: then the
+     * consumer gets a buffer of its own. */
+    for (int i = 0; g_v6 && i + 1 < g_nops; i++) {
+        Op *o = &g_ops[i], *c = &g_ops[i + 1];
+        if (o->type != OP_CONV || !o->use_v5 || o->act == 2 || c->type != OP_CONV || c->depthwise || !c->p ||
+            c->in != o->out || g_alias[o->out])
+            continue;
+        int readers = 0;
+        for (int j = 0; j < g_nops; j++) {
+            Op* q = &g_ops[j];
+            readers += q->in == o->out || (q->type == OP_ADD && q->in2 == o->out);
+            for (int k = 0; q->type == OP_CONCAT && k < q->n_ins; k++) readers += q->ins[k] == o->out && k > 0;
+        }
+        for (int t = 0; t < MAX_TENSORS; t++) readers += g_alias[t] == o->out + 1;
+        for (int k = 0; k < g_n_outs; k++) readers += g_outs[k] == o->out;
+        if (readers != 1) continue;
+        if (c->pad == o->pad) {
+            size_t len = (size_t)c->cin * (g_t[c->in].h + 2 * c->p) * (g_t[c->in].w + 2 * c->p);
+            c->pad = v5_alloc(len);
+            memset(c->pad, 0, len * sizeof(float));
+        }
+        o->out_pad = c->pad;
+        o->out_p = c->p;
+        c->pad_filled = 1;
+    }
 }
 
 /* A 1x1 expansion read only by the 3x3 depthwise right after it runs inside that op
@@ -616,6 +673,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--dw-c4-max") == 0) g_dw_c4_max = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--fuse-pwdw") == 0) g_fuse_pwdw = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--fuse-px") == 0) g_fuse_px = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--plan-m") == 0) g_plan_m = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");
@@ -624,7 +682,7 @@ int main(int argc, char** argv) {
 
     float* weights = read_floats(weights_path, NULL);
     int in_id = -1;
-    load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, &in_id);
+    load_plan(plan, weights, strcmp(variant, "direct_packed") != 0, T, &in_id);
     if (in_id < 0 || g_n_outs == 0) die("plan has no INPUT or OUTPUT");
     fuse_pw_dw();
     size_t act_bytes = assign_buffers(in_id);

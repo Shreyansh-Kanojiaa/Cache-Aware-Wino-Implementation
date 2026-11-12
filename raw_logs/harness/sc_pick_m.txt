@@ -1,0 +1,51 @@
+  [PASSED] All variant path assertions and numerical tolerances validated.
+PROF in=2.18 mul=5.88 out=1.22 (ms/run, thread 0) freq=1800
+PROF in=2.16 mul=6.66 out=1.41 (ms/run, thread 0) freq=1800
+PROF in=2.92 mul=5.75 out=1.73 (ms/run, thread 0) freq=1800
+PROF in=3.17 mul=6.87 out=2.00 (ms/run, thread 0) freq=1800
+64@56:  [--variant v6_freq --m 4 --batch 12] 9.25ms 25.0GF  [--variant v6_freq --m 4 --batch 24] 10.16ms 22.8GF  [--variant v6_freq --m 6 --batch 12] 10.25ms 22.6GF  [--variant v6_freq --m 6 --batch 24] 11.96ms 19.3GF
+PROF in=1.27 mul=6.53 out=0.95 (ms/run, thread 0) freq=1800
+PROF in=1.36 mul=7.17 out=0.99 (ms/run, thread 0) freq=1800
+PROF in=1.85 mul=6.68 out=1.12 (ms/run, thread 0) freq=1800
+PROF in=1.92 mul=7.02 out=1.13 (ms/run, thread 0) freq=1800
+128@28:  [--variant v6_freq --m 4 --batch 12] 8.73ms 26.5GF  [--variant v6_freq --m 4 --batch 24] 9.45ms 24.5GF  [--variant v6_freq --m 6 --batch 12] 9.58ms 24.1GF  [--variant v6_freq --m 6 --batch 24] 9.91ms 23.3GF
+PROF in=1.12 mul=7.94 out=0.62 (ms/run, thread 0) freq=1800
+PROF in=1.15 mul=8.33 out=0.61 (ms/run, thread 0) freq=1800
+PROF in=1.37 mul=10.15 out=0.90 (ms/run, thread 0) freq=1800
+PROF in=1.37 mul=10.97 out=0.91 (ms/run, thread 0) freq=1800
+256@14:  [--variant v6_freq --m 4 --batch 12] 9.64ms 24.0GF  [--variant v6_freq --m 4 --batch 24] 10.17ms 22.7GF  [--variant v6_freq --m 6 --batch 12] 12.54ms 18.4GF  [--variant v6_freq --m 6 --batch 24] 13.35ms 17.3GF
+PROF in=0.48 mul=9.52 out=0.32 (ms/run, thread 0) freq=1800
+PROF in=0.47 mul=9.63 out=0.32 (ms/run, thread 0) freq=1800
+PROF in=0.83 mul=16.67 out=0.59 (ms/run, thread 0) freq=1800
+PROF in=0.82 mul=16.93 out=0.59 (ms/run, thread 0) freq=1800
+512@7:  [--variant v6_freq --m 4 --batch 12] 10.36ms 22.3GF  [--variant v6_freq --m 4 --batch 24] 10.48ms 22.1GF  [--variant v6_freq --m 6 --batch 12] 18.24ms 12.7GF  [--variant v6_freq --m 6 --batch 24] 18.43ms 12.5GF
+PROF in=0.87 mul=4.31 out=0.69 (ms/run, thread 0) freq=1800
+PROF in=0.91 mul=4.62 out=0.68 (ms/run, thread 0) freq=1800
+PROF in=0.87 mul=4.16 out=0.54 (ms/run, thread 0) freq=1800
+PROF in=0.90 mul=3.59 out=0.63 (ms/run, thread 0) freq=1800
+128@24:  [--variant v6_freq --m 4 --batch 12] 5.84ms 29.1GF  [--variant v6_freq --m 4 --batch 24] 6.14ms 27.7GF  [--variant v6_freq --m 6 --batch 12] 5.41ms 31.4GF  [--variant v6_freq --m 6 --batch 24] 5.20ms 32.7GF
+PROF in=0.92 mul=12.19 out=0.68 (ms/run, thread 0) freq=1800
+PROF in=0.93 mul=12.17 out=0.67 (ms/run, thread 0) freq=1800
+PROF in=0.57 mul=9.40 out=0.47 (ms/run, thread 0) freq=1800
+PROF in=0.57 mul=9.35 out=0.46 (ms/run, thread 0) freq=1800
+384@12:  [--variant v6_freq --m 4 --batch 12] 13.87ms 27.5GF  [--variant v6_freq --m 4 --batch 24] 13.87ms 27.5GF  [--variant v6_freq --m 6 --batch 12] 10.54ms 36.3GF  [--variant v6_freq --m 6 --batch 24] 10.48ms 36.5GF
+PROF in=6.10 mul=17.00 out=3.34 (ms/run, thread 0) freq=1800
+PROF in=6.13 mul=18.40 out=4.28 (ms/run, thread 0) freq=1800
+PROF in=7.20 mul=15.15 out=5.20 (ms/run, thread 0) freq=1800
+PROF in=7.68 mul=17.14 out=5.15 (ms/run, thread 0) freq=1800
+64@96:  [--variant v6_freq --m 4 --batch 12] 26.29ms 25.8GF  [--variant v6_freq --m 4 --batch 24] 28.62ms 23.7GF  [--variant v6_freq --m 6 --batch 12] 27.45ms 24.7GF  [--variant v6_freq --m 6 --batch 24] 29.67ms 22.9GF
+64@56:  [--variant v6_freq --m 4 --batch 8] 5.41ms 42.7GF  [--variant v6_freq --m 4 --batch 12] 6.09ms 38.0GF  [--variant v6_freq --m 4 --batch 16] 6.20ms 37.3GF  [--variant v6_freq --m 4 --batch 24] 6.49ms 35.6GF
+128@28:  [--variant v6_freq --m 4 --batch 8] 5.00ms 46.2GF  [--variant v6_freq --m 4 --batch 12] 5.64ms 41.0GF  [--variant v6_freq --m 4 --batch 16] 3.86ms 59.9GF  [--variant v6_freq --m 4 --batch 24] 3.79ms 61.0GF
+256@14:  [--variant v6_freq --m 4 --batch 8] 4.30ms 53.8GF  [--variant v6_freq --m 4 --batch 12] 4.23ms 54.6GF  [--variant v6_freq --m 4 --batch 16] 4.34ms 53.2GF  [--variant v6_freq --m 4 --batch 24] 4.41ms 52.4GF
+128@24:  [--variant v6_freq --m 4 --batch 8] 3.62ms 46.9GF  [--variant v6_freq --m 4 --batch 12] 2.83ms 60.1GF  [--variant v6_freq --m 4 --batch 16] 2.84ms 59.7GF  [--variant v6_freq --m 4 --batch 24] 2.81ms 60.5GF
+s2 64@56:  [--variant direct_packed --stride 2 --dp-block 16] 6.07ms 38.1GF
+s2 128@28:  [--variant direct_packed --stride 2 --dp-block 16] 6.17ms 37.5GF
+s2 256@14:  [--variant direct_packed --stride 2 --dp-block 16] 6.55ms 35.3GF
+s2 64@56:  [--variant direct_packed --stride 2 --dp-block 48] 5.95ms 38.9GF
+s2 128@28:  [--variant direct_packed --stride 2 --dp-block 48] 5.73ms 40.3GF
+s2 256@14:  [--variant direct_packed --stride 2 --dp-block 48] 6.25ms 37.0GF
+s2 64@56:  [--variant direct_packed --stride 2 --dp-block 96] 6.08ms 38.0GF
+s2 128@28:  [--variant direct_packed --stride 2 --dp-block 96] 5.82ms 39.7GF
+s2 256@14:  [--variant direct_packed --stride 2 --dp-block 96] 7.65ms 30.2GF
+
+[exited with code 0]
