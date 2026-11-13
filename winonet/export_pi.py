@@ -28,8 +28,9 @@ for name in sys.argv[1:]:
     model.load_state_dict(ck["state"])
     model.eval()
     onnx_path = os.path.join(OWN, f"woof_{name}.onnx")   # woof_: never clash with the benchmark models
+    kw = {"dynamo": False} if int(torch.__version__.split(".")[0]) >= 2 else {}   # PyTorch 1.x has only this exporter
     torch.onnx.export(model, torch.zeros(1, 3, 192, 192), onnx_path, input_names=["input"], output_names=["logits"],
-                      opset_version=13, dynamo=False)
+                      opset_version=13, **kw)
     plan, weights, _, _ = export_plan(f"woof_{name}")
     val = np.load(os.path.join(here, f"{name}_val.npz"))
     agree = correct = 0

@@ -1,0 +1,43 @@
+governor schedutil temp0 38000
+NVPM ERROR: Error opening /sys/kernel/nvpmodel_emc_cap/emc_iso_cap: 13
+NVPM ERROR: failed to read PARAM EMC: ARG MAX_FREQ: PATH /sys/kernel/nvpmodel_emc_cap/emc_iso_cap
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+mobilenet_v2 T=1 base=148.06 new=111.04 (-25.0%, p=7e-15) err=5.2e-06
+mobilenet_v2 T=4 base=43.39 new=33.80 (-22.1%, p=7e-15) err=5.2e-06
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+resnet18 T=1 base=354.24 new=293.76 (-17.1%, p=7e-15) err=8.4e-07
+resnet18 T=4 base=109.09 new=95.32 (-12.6%, p=7e-15) err=8.4e-07
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+resnet34 T=1 base=636.27 new=515.13 (-19.0%, p=7e-15) err=1.1e-06
+resnet34 T=4 base=191.49 new=164.16 (-14.3%, p=7e-15) err=1.1e-06
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+woof_resnet18 T=1 base=266.54 new=211.66 (-20.6%, p=7e-15) err=1.0e-06
+woof_resnet18 T=4 base=86.13 new=76.36 (-11.3%, p=7e-15) err=1.4e-06
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+woof_wn_e T=1 base=106.84 new=73.95 (-30.8%, p=7e-15) err=4.6e-07
+woof_wn_e T=4 base=32.41 new=25.54 (-21.2%, p=7e-15) err=6.1e-07
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+alexnet T=1 base=215.11 new=196.64 (-8.6%, p=7e-15) err=7.6e-07
+alexnet T=4 base=80.12 new=74.09 (-7.5%, p=7e-15) err=7.6e-07
+fatal: not a git repository (or any of the parent directories): .git
+/home/jetson/.local/lib/python3.6/site-packages/torchvision/io/image.py:11: UserWarning: Failed to load image Python extension: 
+  warn(f"Failed to load image Python extension: {e}")
+vgg16 T=1 base=2152.79 new=1674.18 (-22.2%, p=7e-15) err=2.7e-06
+vgg16 T=4 base=669.52 new=509.44 (-23.9%, p=7e-15) err=2.7e-06
+done
+temp0 39500 rc=0
+finished

@@ -773,6 +773,14 @@ void conv2d_v4_pretransformed_packed(
  * blocks. --batch 1 gives one-tile-at-a-time fusion with the same inner loop.
  * ------------------------------------------------------------------------- */
 typedef float v4f __attribute__((vector_size(16), aligned(4), may_alias));
+/* Two-vector shuffle. GCC before 12 (the Jetson Nano ships 7.5) only has __builtin_shuffle,
+ * which takes the indices as an integer vector. */
+#if defined(__clang__) || __GNUC__ >= 12
+#define SHUF4(a, b, i0, i1, i2, i3) __builtin_shufflevector(a, b, i0, i1, i2, i3)
+#else
+typedef int v4i_idx __attribute__((vector_size(16)));
+#define SHUF4(a, b, i0, i1, i2, i3) __builtin_shuffle(a, b, (v4i_idx){i0, i1, i2, i3})
+#endif
 
 /* g_v5_batch 0 means auto: batching only pays once the weight table outgrows L2.
  * ponytail: the 1 MB L2, batch sizes and kc were tuned on one RPi4 at T=4. Pass
@@ -1199,14 +1207,14 @@ static inline void dp_write_pixels(const float* O, float* output, int pix0, int 
             for (int half = 0; half < 2; half++) {
                 v4f a = *(const v4f*)(o + half * 4), b = *(const v4f*)(o + 8 + half * 4);
                 v4f c = *(const v4f*)(o + 16 + half * 4), d = *(const v4f*)(o + 24 + half * 4);
-                v4f t0 = __builtin_shufflevector(a, b, 0, 4, 1, 5), t1 = __builtin_shufflevector(a, b, 2, 6, 3, 7);
-                v4f t2 = __builtin_shufflevector(c, d, 0, 4, 1, 5), t3 = __builtin_shufflevector(c, d, 2, 6, 3, 7);
+                v4f t0 = SHUF4(a, b, 0, 4, 1, 5), t1 = SHUF4(a, b, 2, 6, 3, 7);
+                v4f t2 = SHUF4(c, d, 0, 4, 1, 5), t3 = SHUF4(c, d, 2, 6, 3, 7);
                 float* y = output + (size_t)(co0 + half * 4) * plane + pix0 + j;
                 int c0 = co0 + half * 4;
-                *(v4f*)(y) = DP_EP(__builtin_shufflevector(t0, t2, 0, 1, 4, 5), c0);
-                *(v4f*)(y + plane) = DP_EP(__builtin_shufflevector(t0, t2, 2, 3, 6, 7), c0 + 1);
-                *(v4f*)(y + 2 * plane) = DP_EP(__builtin_shufflevector(t1, t3, 0, 1, 4, 5), c0 + 2);
-                *(v4f*)(y + 3 * plane) = DP_EP(__builtin_shufflevector(t1, t3, 2, 3, 6, 7), c0 + 3);
+                *(v4f*)(y) = DP_EP(SHUF4(t0, t2, 0, 1, 4, 5), c0);
+                *(v4f*)(y + plane) = DP_EP(SHUF4(t0, t2, 2, 3, 6, 7), c0 + 1);
+                *(v4f*)(y + 2 * plane) = DP_EP(SHUF4(t1, t3, 0, 1, 4, 5), c0 + 2);
+                *(v4f*)(y + 3 * plane) = DP_EP(SHUF4(t1, t3, 2, 3, 6, 7), c0 + 3);
             }
         }
     }
@@ -1580,12 +1588,12 @@ static inline void v6_output_group(int m, const float* Mb, float* output, size_t
             for (int half = 0; half < 2; half++) {
                 v4f a = *(const v4f*)(o + half * 4), b = *(const v4f*)(o + 8 + half * 4);
                 v4f c = *(const v4f*)(o + 16 + half * 4), d = *(const v4f*)(o + 24 + half * 4);
-                v4f t0 = __builtin_shufflevector(a, b, 0, 4, 1, 5), t1 = __builtin_shufflevector(a, b, 2, 6, 3, 7);
-                v4f t2 = __builtin_shufflevector(c, d, 0, 4, 1, 5), t3 = __builtin_shufflevector(c, d, 2, 6, 3, 7);
-                mt[half * 4 + 0][k] = __builtin_shufflevector(t0, t2, 0, 1, 4, 5);
-                mt[half * 4 + 1][k] = __builtin_shufflevector(t0, t2, 2, 3, 6, 7);
-                mt[half * 4 + 2][k] = __builtin_shufflevector(t1, t3, 0, 1, 4, 5);
-                mt[half * 4 + 3][k] = __builtin_shufflevector(t1, t3, 2, 3, 6, 7);
+                v4f t0 = SHUF4(a, b, 0, 4, 1, 5), t1 = SHUF4(a, b, 2, 6, 3, 7);
+                v4f t2 = SHUF4(c, d, 0, 4, 1, 5), t3 = SHUF4(c, d, 2, 6, 3, 7);
+                mt[half * 4 + 0][k] = SHUF4(t0, t2, 0, 1, 4, 5);
+                mt[half * 4 + 1][k] = SHUF4(t0, t2, 2, 3, 6, 7);
+                mt[half * 4 + 2][k] = SHUF4(t1, t3, 0, 1, 4, 5);
+                mt[half * 4 + 3][k] = SHUF4(t1, t3, 2, 3, 6, 7);
             }
         }
         for (int j = 0; j < 8 && cb * 8 + j < Cout; j++) {
@@ -1833,9 +1841,9 @@ static inline void dw3_row(const float* r0, const float* r1, const float* r2, co
 #else
                 v4f a0 = *(const v4f*)p, a1 = *(const v4f*)(p + 4);
                 v4f b0 = *(const v4f*)(p + 1), b1 = *(const v4f*)(p + 5);
-                v4f evens = __builtin_shufflevector(a0, a1, 0, 2, 4, 6);
-                v4f odds = __builtin_shufflevector(b0, b1, 0, 2, 4, 6);
-                v4f thirds = __builtin_shufflevector(a0, a1, 2, 4, 6, 6);
+                v4f evens = SHUF4(a0, a1, 0, 2, 4, 6);
+                v4f odds = SHUF4(b0, b1, 0, 2, 4, 6);
+                v4f thirds = SHUF4(a0, a1, 2, 4, 6, 6);
                 thirds[3] = p[8];
 #endif
                 acc += evens * f[r * 3] + odds * f[r * 3 + 1] + thirds * f[r * 3 + 2];
@@ -1946,10 +1954,10 @@ static void dw3_p1(const float* input, const float* weights, const float* bias, 
 
 /* 4x4 transpose in place: a b c d become the columns */
 #define DW_TR4(a, b, c, d) do { \
-    v4f t0_ = __builtin_shufflevector(a, b, 0, 4, 1, 5), t1_ = __builtin_shufflevector(a, b, 2, 6, 3, 7); \
-    v4f t2_ = __builtin_shufflevector(c, d, 0, 4, 1, 5), t3_ = __builtin_shufflevector(c, d, 2, 6, 3, 7); \
-    a = __builtin_shufflevector(t0_, t2_, 0, 1, 4, 5); b = __builtin_shufflevector(t0_, t2_, 2, 3, 6, 7); \
-    c = __builtin_shufflevector(t1_, t3_, 0, 1, 4, 5); d = __builtin_shufflevector(t1_, t3_, 2, 3, 6, 7); } while (0)
+    v4f t0_ = SHUF4(a, b, 0, 4, 1, 5), t1_ = SHUF4(a, b, 2, 6, 3, 7); \
+    v4f t2_ = SHUF4(c, d, 0, 4, 1, 5), t3_ = SHUF4(c, d, 2, 6, 3, 7); \
+    a = SHUF4(t0_, t2_, 0, 1, 4, 5); b = SHUF4(t0_, t2_, 2, 3, 6, 7); \
+    c = SHUF4(t1_, t3_, 0, 1, 4, 5); d = SHUF4(t1_, t3_, 2, 3, 6, 7); } while (0)
 
 /* 3x3 padding 1 on small planes, 4 channels per vector: a row of 7 or 14 pixels leaves
  * little for pixel vectors and every row pays fixed costs, so 4 channels are interleaved

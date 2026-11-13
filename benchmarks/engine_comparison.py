@@ -295,21 +295,31 @@ def main():
     p.add_argument("--xnnpack-dir", default=os.path.expanduser("~/third_party/XNNPACK"))
     p.add_argument("--raw", default="raw_logs/harness/engine_comparison.csv")
     p.add_argument("--summary", default="summary/harness/engine_comparison.csv")
+    p.add_argument("--skip", default="", help="engines not installed on this board, e.g. xnnpack,tflite")
     args = p.parse_args()
+    skip = set(filter(None, args.skip.split(",")))
 
     build()
     subprocess.run(["gcc", "-O3", "-march=native", "-fopenmp", "-o", RUNNER,
                     os.path.join(os.path.dirname(SRC), "model_runner.c"), "-lm"], check=True)
     check_power()
-    build_xnnpack_runner(args.xnnpack_dir)
+    if "xnnpack" not in skip:
+        build_xnnpack_runner(args.xnnpack_dir)
 
     git_hash = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, stdout=subprocess.PIPE,
                               universal_newlines=True).stdout.strip()
-    xnn_hash = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=args.xnnpack_dir, stdout=subprocess.PIPE,
-                              universal_newlines=True).stdout.strip()
-    import ncnn
-    import ai_edge_litert
-    versions = f"xnnpack={xnn_hash};ncnn={ncnn.__version__};litert={ai_edge_litert.__version__}"
+    versions = []
+    if "xnnpack" not in skip:
+        versions.append("xnnpack=" + subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=args.xnnpack_dir,
+                                                    stdout=subprocess.PIPE, universal_newlines=True).stdout.strip())
+    if "ncnn" not in skip:
+        import ncnn
+        versions.append(f"ncnn={ncnn.__version__}")
+    if "tflite" not in skip:
+        import ai_edge_litert
+        versions.append(f"litert={ai_edge_litert.__version__}")
+    import onnxruntime
+    versions = ";".join(versions + [f"onnxruntime={onnxruntime.__version__}"])
     print(versions, flush=True)
     timestamp = datetime.datetime.now().isoformat()
     models = MODELS if args.models == "all" else args.models.split(",")
@@ -333,8 +343,10 @@ def main():
             np.random.RandomState(0).randn(1, *shape).astype(np.float32).tofile(input_path)
             param_path = os.path.join(PLAN_DIR, f"{model}.param")
             bin_path = os.path.join(PLAN_DIR, f"{model}.ncnn.bin")
-            in_blob, out_blob = write_ncnn_model(plan, weights, param_path, bin_path)
-            tflite_path = convert_tflite(model, onnx_path)
+            if "ncnn" not in skip:
+                in_blob, out_blob = write_ncnn_model(plan, weights, param_path, bin_path)
+            if "tflite" not in skip:
+                tflite_path = convert_tflite(model, onnx_path)
 
             for T in (int(t) for t in args.threads.split(",")):
                 results = []
@@ -355,14 +367,18 @@ def main():
                     if name in C_KEEP:
                         rows, out = run_c(plan, weights, input_path, variant, batch, T, args.runs, args.warmup, extra)
                         record(name, [float(r["total_ms"]) for r in rows], out, rows)
-                rows, out = run_xnnpack(plan, weights, input_path, T, args.runs, args.warmup)
-                record("xnnpack", [float(r["total_ms"]) for r in rows], out, rows)
+                if "xnnpack" not in skip:
+                    rows, out = run_xnnpack(plan, weights, input_path, T, args.runs, args.warmup)
+                    record("xnnpack", [float(r["total_ms"]) for r in rows], out, rows)
                 for name, winograd, fp16 in (("ncnn", True, True), ("ncnn_no_winograd", False, True), ("ncnn_fp32", True, False)):
+                    if "ncnn" in skip:
+                        break
                     lats, out = in_own_process(run_ncnn, param_path, bin_path, in_blob, out_blob, input_path, shape, T,
                                                args.runs, args.warmup, winograd, fp16)
                     record(name, lats, out)
-                lats, out = in_own_process(run_tflite, tflite_path, onnx_path, input_path, shape, T, args.runs, args.warmup)
-                record("tflite", lats, out)
+                if "tflite" not in skip:
+                    lats, out = in_own_process(run_tflite, tflite_path, onnx_path, input_path, shape, T, args.runs, args.warmup)
+                    record("tflite", lats, out)
                 raw_file.flush()
 
                 ours = next(r[1] for r in results if r[0] == OURS)
@@ -381,7 +397,8 @@ def main():
                     writer.writeheader()
                     writer.writerows(summary)
             for path in (weights, bin_path):
-                os.remove(path)
+                if os.path.exists(path):
+                    os.remove(path)
 
     print(f"Summary: {args.summary}")
 

@@ -49,6 +49,9 @@ CATEGORIES = ["conv3x3_s1_ms", "conv_other_ms", "pad_ms", "relu_ms", "pool_ms", 
 
 def in_own_process(fn, *args):
     """Run fn in a fresh process. Unlike multiprocessing.Pool, a crash raises instead of hanging."""
+    if sys.version_info < (3, 7):   # no mp_context yet (the Jetson's Python 3.6)
+        with mp.get_context("spawn").Pool(1) as pool:
+            return pool.apply(fn, args)
     with ProcessPoolExecutor(1, mp_context=mp.get_context("spawn")) as pool:
         return pool.submit(fn, *args).result()
 
@@ -61,6 +64,9 @@ def export_plan(model_name):
         _export_onnx(model_name, onnx_path)
     graph = onnx.load(onnx_path).graph
     inits = {i.name: onh.to_array(i).astype(np.float32) for i in graph.initializer}
+    # Older exporters (PyTorch 1.10 on the Jetson) write Clip bounds as Constant nodes
+    inits.update({n.output[0]: onh.to_array(n.attribute[0].t).astype(np.float32)
+                  for n in graph.node if n.op_type == "Constant"})
     consumers = collections.Counter(x for n in graph.node for x in n.input)
     tiler = CacheAdaptiveAutotiler()
 
@@ -100,6 +106,8 @@ def export_plan(model_name):
             return start
 
         for node in graph.node:
+            if node.op_type == "Constant":
+                continue
             op, a = node.op_type, attrs(node)
             name = node.output[0]
             src = node.input[0]

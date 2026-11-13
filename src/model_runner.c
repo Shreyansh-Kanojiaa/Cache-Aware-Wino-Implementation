@@ -53,6 +53,7 @@ static int g_fc_fp16;  /* store fully connected weights as 16-bit floats, as ncn
 static int g_outs[MAX_OUTPUTS];
 static int g_n_outs;
 static int g_recycle = 1;
+static int g_pad_link = 1;             /* v6 convs write into the next conv's padded input (0 for the ablation) */
 static int g_fuse_pwdw = 784;          /* fuse 1x1 + depthwise pairs with at least this many pixels, 0 never */
 static int g_fuse_act = 1;             /* apply ReLU, ReLU6 and SiLU in the conv's own output pass */              /* share activation buffers between tensors whose lifetimes don't overlap */
 static int g_alias[MAX_TENSORS];       /* SPLIT halves: source tensor + 1, 0 if none */
@@ -577,7 +578,7 @@ static void load_plan(const char* path, const float* weights, int use_v5, int T,
      * between, so the pad buffer (shared by convs of one shape) can't be overwritten, except
      * by the producer itself when it reads its own input from that buffer: then the
      * consumer gets a buffer of its own. */
-    for (int i = 0; g_v6 && i + 1 < g_nops; i++) {
+    for (int i = 0; g_v6 && g_pad_link && i + 1 < g_nops; i++) {
         Op *o = &g_ops[i], *c = &g_ops[i + 1];
         if (o->type != OP_CONV || !o->use_v5 || o->act == 2 || c->type != OP_CONV || c->depthwise || !c->p ||
             c->in != o->out || g_alias[o->out])
@@ -674,6 +675,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--fuse-pwdw") == 0) g_fuse_pwdw = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--fuse-px") == 0) g_fuse_px = atoi(argv[i + 1]);
         else if (strcmp(argv[i], "--plan-m") == 0) g_plan_m = atoi(argv[i + 1]);
+        else if (strcmp(argv[i], "--pad-link") == 0) g_pad_link = atoi(argv[i + 1]);
         else die("unknown argument");
     }
     if (!plan || !weights_path || !input_path || !output_path || !csv) die("missing argument");

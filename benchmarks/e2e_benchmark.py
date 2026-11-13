@@ -315,10 +315,15 @@ def _export_onnx(model_name, path):
     }
     if model_name not in model_fn:
         return
-    model = model_fn[model_name](weights=None).eval()
+    def fresh():   # random weights; torchvision before 0.13 (the Jetson's) spells it pretrained=False
+        try:
+            return model_fn[model_name](weights=None)
+        except TypeError:
+            return model_fn[model_name](pretrained=False)
+    model = fresh().eval()
     if model_name == "mobilenet_v2":
         torch.manual_seed(0)
-        model = model_fn[model_name](weights=None)
+        model = fresh()
         _calibrate_batch_norm(model, (3, 224, 224))
     dummy = torch.randn(1, 3, 224, 224)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
